@@ -1,3 +1,4 @@
+import { Explained } from '../ui/Explained';
 // OPENINGS: idea-first courses, line practice with spaced repetition, a
 // personal repertoire builder, and how you actually score in each opening.
 import { useEffect, useMemo, useState } from 'react';
@@ -142,8 +143,8 @@ function CourseView({ data, id }: { data: AppData; id: string }) {
           </div>
         </div>
         <div className="space-y-3">
-          <Card title="Key ideas"><ul className="list-disc pl-5 space-y-1 text-sm text-ink-200">{c.ideas.map((x) => <li key={x}>{x}</li>)}</ul>
-            <div className="label mt-3 mb-1">Typical plans</div><ul className="list-disc pl-5 space-y-1 text-sm text-ink-300">{c.plans.map((x) => <li key={x}>{x}</li>)}</ul></Card>
+          <Card title="Key ideas"><ul className="list-disc pl-5 space-y-1 text-sm text-ink-200">{c.ideas.map((x) => <li key={x}><Explained text={x} /></li>)}</ul>
+            <div className="label mt-3 mb-1">Typical plans</div><ul className="list-disc pl-5 space-y-1 text-sm text-ink-300">{c.plans.map((x) => <li key={x}><Explained text={x} /></li>)}</ul></Card>
           <Card title="Lines">
             <div className="space-y-1">
               {lines.map((l, i) => (
@@ -158,8 +159,8 @@ function CourseView({ data, id }: { data: AppData; id: string }) {
             <div className="text-xs font-mono text-ink-300 leading-relaxed">
               {line.san.map((s, i) => <button key={i} onClick={() => setPly(i)} className={`mr-1 rounded px-0.5 ${i === ply ? 'bg-brass-500/30 text-brass-300' : 'hover:text-ink-100'} ${line.trap?.badPly === i ? 'underline decoration-miss' : ''}`}>{i % 2 === 0 ? `${i / 2 + 1}.` : ''}{s}</button>)}
             </div>
-            <div className="mt-3 min-h-[3rem] text-sm text-ink-200">{note ?? (ply < 0 ? 'Step through the line with ▶. Each key move has a short note.' : nameHere ? <span className="text-ink-400">{nameHere}</span> : '')}</div>
-            {line.trap && ply >= line.trap.badPly && <p className="mt-2 text-sm text-miss">{line.trap.text}</p>}
+            <div className="mt-3 min-h-[3rem] text-sm text-ink-200">{note ? <Explained text={note} /> : (ply < 0 ? 'Step through the line with ▶. Each key move has a short note.' : nameHere ? <span className="text-ink-400">{nameHere}</span> : '')}</div>
+            {line.trap && ply >= line.trap.badPly && <p className="mt-2 text-sm text-miss"><Explained text={line.trap.text} /></p>}
             <div className="mt-3 flex flex-wrap gap-2">
               <button className="btn btn-primary btn-sm" onClick={() => go(`openings/practice/${line.id}`)}>Practise this line</button>
               <button className="btn btn-sm" disabled={inRep} onClick={() => REP.put({ id: uid(), color: c.color, name: `${c.name}: ${line.name}`, moves: line.uci, source: 'builtin', courseId: c.id, created: Date.now() })}>{inRep ? 'In my repertoire ✓' : 'Add to my repertoire'}</button>
@@ -227,7 +228,7 @@ function PracticeView({ data, lineId }: { data: AppData; lineId: string }) {
         <Card>
           <div className="text-sm text-ink-300">Play the {line.color === 'w' ? 'White' : 'Black'} moves of this line from memory. The other side moves automatically.</div>
           <div className="mt-3 text-xs font-mono text-ink-400">{formatLine(new Chess().fen(), line.san.slice(0, ply)) || '—'}</div>
-          {msg && <p className="mt-3 text-sm text-ink-200">{msg}</p>}
+          {msg && <p className="mt-3 text-sm text-ink-200"><Explained text={msg} /></p>}
           {line.trap && ply > line.trap.badPly && <p className="mt-3 text-sm text-miss">{line.trap.text}</p>}
           {done && <div className="mt-4">
             <div className={`font-semibold ${errors ? 'text-mistake' : 'text-good'}`}>{errors ? `Completed with ${errors} error${errors === 1 ? '' : 's'}: it comes back for review tomorrow.` : 'Perfect! This line comes back at a longer interval.'}</div>

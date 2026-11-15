@@ -10,7 +10,10 @@ import { tryMove } from '../src/chess/util';
 import { themeFromMotifs } from '../src/training/themes';
 import type { Exercise } from '../src/training/types';
 
-const all: Exercise[] = readdirSync('data-src/gen').filter((f) => f.endsWith('.json')).flatMap((f) => JSON.parse(readFileSync(`data-src/gen/${f}`, 'utf8')));
+// Start from the current bundled bank, then add new generator output.
+const existing: Exercise[] = JSON.parse(readFileSync('src/data/puzzles.json', 'utf8'));
+const fresh: Exercise[] = readdirSync('data-src/gen').filter((f) => f.endsWith('.json')).flatMap((f) => JSON.parse(readFileSync(`data-src/gen/${f}`, 'utf8')));
+const all: Exercise[] = [...existing, ...fresh];
 const seen = new Set<string>();
 const out: Exercise[] = [];
 for (const x of all) {
@@ -39,7 +42,8 @@ const kept: Exercise[] = [];
 for (const [t, xs] of Object.entries(by)) {
   // keep the hardest-looking ones when capping (higher raw rating first)
   xs.sort((a, b) => b.rating - a.rating);
-  kept.push(...xs.slice(0, CAPS[t] ?? 10000));
+  const eg = xs.filter((x) => x.phase === 'endgame'), rest = xs.filter((x) => x.phase !== 'endgame');
+  kept.push(...eg, ...rest.slice(0, CAPS[t] ?? 10000));
 }
 // Rank-based spread of raw difficulty into ~700-1900, so every level has material.
 const tactics = kept.filter((x) => x.kind === 'tactic').sort((a, b) => a.rating - b.rating || a.solution.length - b.solution.length);

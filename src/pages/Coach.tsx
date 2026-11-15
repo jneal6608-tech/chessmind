@@ -1,3 +1,4 @@
+import { Explained } from '../ui/Explained';
 // AI COACH: explore any position on the board and ask questions about it.
 // The built-in coach works offline from Stockfish analysis; with an Anthropic
 // API key (Settings) answers come from Claude, grounded in the same engine tools.
@@ -10,6 +11,7 @@ import { useAppData } from '../services/data';
 import { coachEngine } from '../engine/browser';
 import { scoreOf, formatScore, type EvalLine } from '../engine/uci';
 import { answer } from '../coach/assistant';
+import { tryIdea } from '../coach/teach';
 import { levelFor } from '../coach/explain';
 import { apiKey } from '../store/settings';
 import { chats } from '../store/db';
@@ -25,6 +27,7 @@ export function CoachPage({ fenParam }: { fenParam?: string }) {
   const [moves, setMoves] = useState<string[]>([]);
   const [flip, setFlip] = useState(false);
   const [live, setLive] = useState(true);
+  const [talk, setTalk] = useState(true);
   const [lines, setLines] = useState<EvalLine[]>([]);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -60,6 +63,17 @@ export function CoachPage({ fenParam }: { fenParam?: string }) {
   const useClaude = !!key && data.settings.aiEnabled;
   const sign = side === 'w' ? 1 : -1;
   const evalW = lines[0] ? scoreOf(lines[0]) * sign : null;
+
+  // Talk me through it: every move played on the board gets a plain-words verdict.
+  async function commentOn(before: string, u: string) {
+    setBusy(true);
+    try {
+      const v = await tryIdea(coachEngine, before, u, level);
+      const lines = [v.headline, v.reason, '', 'What happens next:', ...v.story.map((st, i) => `${i + 1}. ${st.text}`), `Result: ${v.result}.`];
+      if (v.better) lines.push('', `Better was ${v.better.san}:`, ...v.better.story.slice(0, 4).map((st, i) => `${i + 1}. ${st.text}`), `Result: ${v.better.result}.`);
+      setMsgs((m) => [...m, { role: 'assistant', text: lines.join('\n'), source: 'Move check (Stockfish)' }]);
+    } catch { /* position changed */ } finally { setBusy(false); }
+  }
 
   async function ask(q: string) {
     if (!q.trim() || busy) return;
@@ -105,7 +119,7 @@ export function CoachPage({ fenParam }: { fenParam?: string }) {
         <div>
           <div className="mx-auto flex w-full max-w-[min(100%,calc(100vh-230px))] gap-2">
             {live && <EvalBar cp={evalW} flipped={flip} />}
-            <div className="flex-1 min-w-0"><Board fen={fen} orientation={flip ? 'black' : 'white'} movable="both" onMove={(u) => { setMoves([...moves, u]); setArrows([]); }}
+            <div className="flex-1 min-w-0"><Board fen={fen} orientation={flip ? 'black' : 'white'} movable="both" onMove={(u) => { setMoves([...moves, u]); setArrows([]); if (talk) void commentOn(fen, u); }}
               lastMove={moves.length ? [moves[moves.length - 1].slice(0, 2), moves[moves.length - 1].slice(2, 4)] : undefined} arrows={arrows.length ? arrows : lines[0] && live ? [{ from: lines[0].pv[0].slice(0, 2), to: lines[0].pv[0].slice(2, 4), color: 'blue' }] : []}
               theme={data.settings.boardTheme} coords={data.settings.showCoords} /></div>
           </div>
@@ -114,6 +128,7 @@ export function CoachPage({ fenParam }: { fenParam?: string }) {
             <button className="btn btn-sm" onClick={() => { setMoves([]); setArrows([]); }}>Reset to start</button>
             <button className="btn btn-sm" onClick={() => setFlip(!flip)}>⇅ Flip</button>
             <button className="btn btn-sm" onClick={() => setLive(!live)}>{live ? 'Hide engine' : 'Show engine'}</button>
+            <button className={`btn btn-sm ${talk ? '!border-brass-500 text-brass-300' : ''}`} onClick={() => setTalk(!talk)} title="Explain every move I play on this board">{talk ? '🗣 Explaining my moves' : '🗣 Explain my moves: off'}</button>
             <button className="btn btn-sm" onClick={() => navigator.clipboard?.writeText(fen)}>Copy FEN</button>
           </div>
           {live && lines.length > 0 && (
@@ -141,7 +156,7 @@ export function CoachPage({ fenParam }: { fenParam?: string }) {
             {msgs.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${m.role === 'user' ? 'bg-brass-500/20 text-ink-100 rounded-br-md' : 'bg-ink-800 text-ink-100 rounded-bl-md'}`}>
-                  {m.text}
+                  {m.role === 'assistant' ? <Explained text={m.text} /> : m.text}
                   {m.source && <div className="mt-1.5 text-[10px] text-ink-500">{m.source}</div>}
                 </div>
               </div>

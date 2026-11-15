@@ -1,3 +1,4 @@
+import { Explained } from '../ui/Explained';
 // TRAINING: daily challenge, weakness training, tactics, endgames, your own
 // mistakes and spaced-repetition reviews.
 import { useEffect, useMemo, useState } from 'react';
@@ -9,6 +10,7 @@ import { buildDaily, todayKey, streak } from '../training/daily';
 import { pick } from '../training/select';
 import { themeRatings } from '../training/srs';
 import { WEAKNESS, THEME_LABEL } from '../training/themes';
+import { isEndgameTactic } from '../training/bank';
 import { STATUS_LABEL } from '../analysis/profile';
 import { go } from '../services/router';
 import type { Exercise } from '../training/types';
@@ -69,7 +71,7 @@ function Hub({ data }: { data: AppData }) {
                 <div><div className="label">Priority {i + 1}</div><div className="mt-1 font-semibold text-lg">{w.label}</div></div>
                 <span className="chip">{STATUS_LABEL[w.status]}</span>
               </div>
-              <p className="mt-2 text-sm text-ink-300 flex-1">{WEAKNESS[w.key]?.lesson}</p>
+              <p className="mt-2 text-sm text-ink-300 flex-1"><Explained text={WEAKNESS[w.key]?.lesson ?? ''} /></p>
               <div className="mt-2 text-xs text-ink-400">{w.incidents} incident{w.incidents === 1 ? '' : 's'} in {w.gamesAffected} game{w.gamesAffected === 1 ? '' : 's'}{w.training ? ` · training success ${(w.training.success * 100).toFixed(0)}%` : ''}</div>
               <button className="btn btn-primary btn-sm mt-3" onClick={() => go(`training/session/weakness/${w.key}`)}>Train this</button>
             </Card>
@@ -91,6 +93,10 @@ function Hub({ data }: { data: AppData }) {
         </Card>
         <Card title="Endgames" right={<button className="btn btn-sm btn-primary" disabled={!endgames.length} onClick={() => go('training/session/endgame')}>Practise</button>}>
           <p className="text-sm text-ink-300 mb-3">Play these out against full-strength Stockfish. Theory first, then practical positions from real games.</p>
+          <button onClick={() => go('training/session/egtactics')} className="mb-3 w-full rounded-xl border border-brass-600/60 bg-brass-500/5 px-3 py-2.5 text-left hover:border-brass-400">
+            <div className="text-sm font-semibold">Endgame tactics ({data.exercises.filter(isEndgameTactic).length})</div>
+            <div className="text-[11px] text-ink-400">Breakthroughs, promotion tricks, forks and pins with few pieces left: find the winning idea.</div>
+          </button>
           <div className="space-y-1.5 max-h-80 overflow-y-auto scroll-thin pr-1">
             {endgames.filter((e) => e.source === 'theory').map((e) => {
               const tries = data.attempts.filter((x) => x.exerciseId === e.id);
@@ -126,6 +132,7 @@ function buildSession(d: AppData, mode: string, theme?: string, dailyItems?: Dai
     }
     case 'tactics': return pick(pool, { themes: theme ? [theme] : TACTIC_THEMES, kinds: ['tactic', 'own_mistake'], count: 10 });
     case 'endgame': return pick(pool, { kinds: ['endgame'], count: 5, ...(theme === 'practical' ? { themes: ['eg_rook', 'eg_pawn', 'eg_minor', 'eg_queen'] } : {}) }).filter((e) => theme !== 'practical' || e.source === 'bank');
+    case 'egtactics': return pick({ ...pool, exercises: d.exercises.filter(isEndgameTactic) }, { count: 8 });
     case 'mistakes': return pick({ ...pool, exercises: d.ownExercises }, { count: 10 });
     case 'review': { const now = Date.now(); return d.exercises.filter((e) => { const c = d.cards.get(e.id); return c && c.due <= now; }).slice(0, 15); }
     default: return [];
@@ -153,7 +160,7 @@ function Session({ data, mode, theme }: { data: AppData; mode: string; theme?: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, theme]);
   if (!list) return <Page title="Training"><Spinner /></Page>;
-  const title = mode === 'daily' ? 'Daily challenge' : mode === 'weakness' ? `Weakness: ${theme ? WEAKNESS[theme]?.label : 'top priorities'}` : mode === 'tactics' ? `Tactics${theme ? ': ' + THEME_LABEL[theme] : ''}` : mode === 'endgame' ? 'Endgames' : mode === 'mistakes' ? 'Your mistakes' : 'Reviews';
+  const title = mode === 'daily' ? 'Daily challenge' : mode === 'weakness' ? `Weakness: ${theme ? WEAKNESS[theme]?.label : 'top priorities'}` : mode === 'tactics' ? `Tactics${theme ? ': ' + THEME_LABEL[theme] : ''}` : mode === 'endgame' ? 'Endgames' : mode === 'egtactics' ? 'Endgame tactics' : mode === 'mistakes' ? 'Your mistakes' : 'Reviews';
   if (!list.length) return <Page title={title}><Empty>Nothing to practise here yet. {mode === 'mistakes' ? 'Play or import games: your mistakes will appear here after analysis.' : mode === 'review' ? 'No reviews are due. Come back tomorrow.' : ''} <a href="#/training" className="underline text-brass-300">Back to training</a></Empty></Page>;
   const finished = idx >= list.length;
   const ex = list[Math.min(idx, list.length - 1)];

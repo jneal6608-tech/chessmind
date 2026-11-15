@@ -94,7 +94,7 @@ describe('built-in coach', () => {
   it('answers threat and move questions from engine facts', async () => {
     const fen = 'r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3';
     const t = await answer(e, fen, 'What is my opponent threatening?', 'beginner');
-    expect(t.text).toContain('Qxf7#');
+    expect(t.text).toMatch(/pawn on f7 with their queen. Checkmate/);
     const m = await answer(e, fen, 'Is Nf6 good?', 'beginner');
     expect(m.text).toMatch(/Nf6/);
     expect(m.text).toMatch(/M1|mate/i);
@@ -109,5 +109,30 @@ describe('unsound sacrifice', () => {
     const m = g.analysis.moves.find((x) => x.san === 'Bxf7+')!;
     expect(['mistake', 'blunder']).toContain(m.cls);
     expect(m.tags.map((t) => t.key)).toContain('unsound_sacrifice');
+  });
+});
+
+import { tryIdea, describeMove, settle, materialWords, tradeWords } from '../src/coach/teach';
+describe('teaching in plain words', () => {
+  it('describes moves with piece names, captures, attacks and piling up', () => {
+    expect(describeMove('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3', 'f1c4', 'w')).toMatch(/You move your bishop from f1 to c4/);
+    expect(describeMove('4k3/8/8/3r4/8/8/8/3RK3 w - - 0 1', 'd1d5', 'w')).toMatch(/You take their rook on d5 with your rook/);
+    expect(describeMove('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4', 'f3g5', 'w')).toMatch(/ganging up on their pawn on f7/);
+  });
+  it('material summaries settle after the exchanges', () => {
+    expect(settle('4k3/8/8/3r4/8/8/8/3RK3 w - - 0 1', ['d1d5', 'e8e7']).delta).toBe(5);
+    expect(materialWords(-9)).toBe('you lose a queen (9 points)');
+    // Qb1?? Nxb1 Nxb1: the queen goes for a knight
+    expect(tradeWords(settle('r3k2r/ppB2ppp/2n1p3/3p1b2/2pP4/2n1PN2/PQ1N1PPP/R3KB1R w KQkq - 1 13', ['b2b1', 'c3b1', 'd2b1']))).toBe('you give up your queen for a knight (you end up 6 points down)');
+    expect(materialWords(0)).toBe('material stays even');
+  });
+  it('the follow-up loop explains why a move fails, and offers the better one', async () => {
+    const v = await tryIdea(e, 'r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3', 'g8f6', 'beginner');
+    expect(v.ok).toBe(false);
+    expect(v.result).toBe('you get checkmated');
+    expect(v.reason).toMatch(/checkmate/);
+    expect(v.better?.san).toBeTruthy();
+    const good = await tryIdea(e, 'r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3', 'g7g6', 'beginner');
+    expect(good.ok).toBe(true);
   });
 });

@@ -46,7 +46,7 @@ export function Board(p: BoardProps) {
 
   useEffect(() => {
     if (!el.current) return;
-    api.current = Chessground(el.current, { disableContextMenu: true, blockTouchScroll: true, addDimensionsCssVarsTo: el.current });
+    api.current = Chessground(el.current, { coordinates: false, disableContextMenu: true, blockTouchScroll: true, addDimensionsCssVarsTo: el.current });
     return () => { api.current?.destroy(); api.current = null; };
   }, []);
 
@@ -62,7 +62,7 @@ export function Board(p: BoardProps) {
       turnColor: turn,
       check: c.isCheck() ? turn : false,
       lastMove: p.lastMove as Key[] | undefined,
-      coordinates: p.coords ?? true,
+      coordinates: false, // drawn outside the board instead (easier to read)
       animation: { enabled: p.animation ?? true, duration: 180 },
       highlight: { lastMove: true, check: true, custom: new Map(Object.entries(p.highlights ?? {}) as [Key, string][]) },
       movable: {
@@ -99,7 +99,11 @@ export function Board(p: BoardProps) {
   };
   const cancelPromo = () => { setPromo(null); api.current?.set({ fen: fenRef.current }); };
 
-  return (
+  const white = (p.orientation ?? 'white') === 'white';
+  const files = white ? 'abcdefgh' : 'hgfedcba';
+  const ranks = white ? '87654321' : '12345678';
+  const showCoords = p.coords ?? true;
+  const shell = (
     <div className={`board-shell theme-${p.theme ?? 'walnut'}`}>
       <div ref={el} className="cg-wrap" />
       {promo && (
@@ -113,6 +117,16 @@ export function Board(p: BoardProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+  if (!showCoords) return shell;
+  // Rank numbers on the left, file letters underneath, outside the squares.
+  return (
+    <div className="board-coords grid grid-cols-[1.1rem_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_1.2rem]">
+      <div className="grid grid-rows-8 pr-1">{[...ranks].map((r) => <span key={r} className="coord-label flex items-center justify-end">{r}</span>)}</div>
+      {shell}
+      <span />
+      <div className="grid grid-cols-8 pt-0.5">{[...files].map((f) => <span key={f} className="coord-label text-center">{f}</span>)}</div>
     </div>
   );
 }

@@ -10,7 +10,9 @@ import { phaseOf, tryMove, nullMoveFen, material, pieces, seeMove } from '../src
 import { endgameType, themeFromMotifs } from '../src/training/themes';
 import type { Exercise } from '../src/training/types';
 
-const [seedArg, gamesArg, outPath] = process.argv.slice(2);
+const [seedArg, gamesArg, outPath, modeArg] = process.argv.slice(2);
+// 'endgame' mode: steer games into endgames (prefer trades) and only collect puzzles there.
+const ENDGAME = modeArg === 'endgame';
 let seed = Number(seedArg) || 1;
 const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
 const openings = Object.values(JSON.parse(readFileSync('src/data/openings.json', 'utf8')) as Record<string, [string, string, number, string]>)
@@ -164,22 +166,28 @@ async function selfPlay() {
   let prev = 0;
   const egTaken = { n: 0 };
   let lopsided = 0;
-  for (let ply = 0; ply < 160 && !c.isGameOver(); ply++) {
+  for (let ply = 0; ply < (ENDGAME ? 220 : 160) && !c.isGameOver(); ply++) {
     const fen = c.fen();
     const r = await e.analyze(fen, { depth: 5 + Math.floor(rand() * 4), multipv: 4 });
     if (!r.lines.length) break;
     // Tactic opportunities show up after a weak move by the side that just moved.
-    if (c.moveNumber() > 6) await considerTactic(fen, -prev);
-    if (rand() < 0.25 && c.moveNumber() > 8) await considerDefense(fen);
+    const inEg = phaseOf(fen) === 'endgame';
+    if (c.moveNumber() > 6 && (!ENDGAME || inEg)) await considerTactic(fen, -prev);
+    if (rand() < (ENDGAME ? 0.5 : 0.25) && c.moveNumber() > 8 && (!ENDGAME || inEg)) await considerDefense(fen);
     if (phaseOf(fen) === 'endgame' && egTaken.n < 3 && rand() < 0.3) { await considerEndgame(fen); egTaken.n++; }
     // Pick a human-ish move: mostly good, sometimes the 2nd-4th choice.
     const best = scoreOf(r.lines[0]);
     // Once one side is clearly winning, the game stops producing fresh puzzle moments (endgames excepted).
-    lopsided = Math.abs(best) > 450 && phaseOf(fen) !== 'endgame' ? lopsided + 1 : 0;
+    lopsided = Math.abs(best) > (ENDGAME ? 700 : 450) && phaseOf(fen) !== 'endgame' ? lopsided + 1 : 0;
     if (lopsided >= 4) break;
     const ok = r.lines.filter((l) => best - scoreOf(l) <= (rand() < 0.22 ? 700 : 60));
     let pick = ok[Math.floor(rand() * ok.length)] ?? r.lines[0];
-    if (ply > 8 && rand() < 0.16) {
+    if (ENDGAME && phaseOf(fen) !== 'endgame') {
+      // Head for an endgame: take an equal trade when one is available among the good moves.
+      const trade = ok.find((l) => { const t = new Chess(fen); const m = tryMove(t, l.pv[0]); return m?.captured && m.captured !== 'p'; });
+      if (trade && rand() < 0.8) pick = trade;
+    }
+    if (ply > 8 && rand() < (ENDGAME && phaseOf(fen) !== 'endgame' ? 0.03 : 0.16)) {
       // A human-like oversight: a move that looks fine at depth 1 but walks into a tactic.
       const shallow = await e.analyze(fen, { depth: 1, multipv: 10 });
       const cand = shallow.lines.filter((l) => l.pv.length);

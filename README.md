@@ -44,6 +44,18 @@ works on any static host and in sub-folders, with no rewrite rules.
 The engine is the single-threaded "lite" Stockfish 19 build, so no special
 headers (COOP/COEP) are needed.
 
+## How it teaches
+
+- **Plain-words stories.** Every engine line is told move by move ("they take your
+  queen with the knight…") and ends with what you actually win or lose
+  ("you give up your queen for a knight").
+- **Try it yourself.** In game reviews, exercises and the AI Coach you can play your
+  own idea; Stockfish answers and the coach explains why it works or fails, shows it
+  on the board step by step, and lets you try again.
+- **Tap a term.** Chess terms (fork, pin, opposition, passed pawn…) are used
+  normally; tap one to see a short definition.
+- **Board labels.** Files a–h and ranks 1–8 are printed around the board.
+
 ## What is in it
 
 | Area | Where |
@@ -57,10 +69,10 @@ headers (COOP/COEP) are needed.
 | Weakness profile (recurring / developing / improving / one-time, priorities) | `src/analysis/profile.ts` |
 | Strength estimate (separate from real ratings) and weekly report | `src/analysis/strength.ts`, `weekly.ts` |
 | Exercises from your games, selection, spaced repetition, daily plan | `src/training/*` |
-| Coach: explanations, built-in Q&A, optional Claude | `src/coach/*` |
+| Coach: explanations, plain-words stories and "try it" verdicts (`teach.ts`), built-in Q&A, optional Claude | `src/coach/*` |
 | Persistence (IndexedDB), backups | `src/store/*` |
 | Screens | `src/pages/*`, `src/ui/*` |
-| Data: repertoire courses, theory endgames, opening names, exercise bank | `src/data/*` |
+| Data: 14 opening courses, theory endgames and studies, glossary, opening names, exercise bank | `src/data/*` |
 
 ### How mistakes are classified
 For each of your inaccuracies, mistakes, blunders and missed wins the reviewer
@@ -141,7 +153,7 @@ play-outs vs Stockfish, the coach, opening practice, and layouts at phone width.
   your real ratings.
 - **Cause classification is heuristic.** Each cause carries a confidence; low
   confidence is shown as such.
-- **The exercise bank is modest** (about 650 positions plus 13 theory endgames), weighted toward
+- **The exercise bank is modest** (about 850 positions, including 200+ endgame tactics, plus 14 theory endgames and classic endgame studies), weighted toward
   material-winning tactics and defence; mates and skewers are fewer. Your own
   games add exercises continuously, and the generator can be run longer.
 - **Lichess / Chess.com import** uses their public APIs from the browser; it

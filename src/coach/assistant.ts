@@ -7,6 +7,8 @@ import { positionFacts, type PositionFacts } from './position';
 import { sanOf, pvToSan, formatLine, colorName, fenAfter } from '../chess/util';
 import { detectMotifs } from '../chess/motifs';
 import { verdictWords, type CoachLevel } from './explain';
+import { narrate, settle, lineResult, describeMove } from './teach';
+import { nullMoveFen } from '../chess/util';
 
 export interface CoachReply { text: string; arrows?: { from: string; to: string; color: string }[]; facts?: PositionFacts }
 
@@ -43,7 +45,10 @@ export async function answer(engine: UciEngine, fen: string, question: string, l
   }
   if (/threat|threaten|danger|attack(ing)? me|what does .* want/.test(q)) {
     if (!facts.threat) return { text: `There is no serious threat right now: if ${colorName(side)} passed, the opponent would gain less than a pawn. ${facts.loosePieces.length ? 'But watch: ' + facts.loosePieces.join('; ') + '.' : ''}`, facts };
-    return { text: `The threat is ${facts.threat.san}${facts.threat.ideas.length ? ': ' + facts.threat.ideas.join('; ') : ''}. It would be worth about ${facts.threat.gain} pawns. The engine deals with it by ${best.san}.`, arrows, facts };
+    const nm = nullMoveFen(fen);
+    const tUci = nm ? (await engine.analyze(nm, { depth: 12 })).lines[0]?.pv[0] : undefined;
+    const said = nm && tUci ? describeMove(nm, tUci, side) : `They play ${facts.threat.san}.`;
+    return { text: `If you ignore it, here's their threat: ${said} That would cost you about ${facts.threat.gain} pawns' worth.\nThe best way to deal with it: ${describeMove(fen, best.uci, side)}`, arrows: tUci ? [...arrows, { from: tUci.slice(0, 2), to: tUci.slice(2, 4), color: 'red' }] : arrows, facts };
   }
   if (/plan|idea|strateg|what should i do|how (do|should) i (continue|play)/.test(q)) {
     const t = [`${verdictWords(facts.evalWhite, side)[0].toUpperCase()}${verdictWords(facts.evalWhite, side).slice(1)} (${facts.evalText}).`];
@@ -57,10 +62,15 @@ export async function answer(engine: UciEngine, fen: string, question: string, l
   if (/eval|who is (better|winning)|score/.test(q)) {
     return { text: `Stockfish at depth ${facts.depth}: ${facts.evalText}. ${verdictWords(facts.evalWhite, side)[0].toUpperCase() + verdictWords(facts.evalWhite, side).slice(1)}. ${facts.material}`, facts };
   }
-  // Default: best move with reasons
-  const alts = facts.bestMoves.slice(1).map((b) => `${b.san} (${b.eval})`).join(', ');
-  let t = `Best is ${best.san} (${best.eval})${best.ideas.length ? ': ' + best.ideas.join('; ') : ''}. Line: ${best.line}.`;
-  if (alts) t += ` Alternatives: ${alts}.`;
+  // Default: best move with reasons, told as a story
+  const plain = level === 'beginner';
+  const bestPv = (await engine.analyze(fen, { depth: 14 })).lines[0]?.pv ?? [best.uci];
+  const st = settle(fen, bestPv);
+  const story = narrate(fen, bestPv, side, Math.max(plain ? 3 : 5, st.plies));
+  let t = `The best move is ${best.san}${plain ? '' : ` (${best.eval})`}. ${best.ideas.length ? cap(best.ideas[0]) + '. ' : ''}Here's how it could go:\n` +
+    story.map((x, i) => `${i + 1}. ${x.text}`).join('\n') + `\nResult: ${lineResult(fen, bestPv, st)}; ${verdictWords(facts.evalWhite, side)}.`;
+  const alts = facts.bestMoves.slice(1).map((b) => plain ? b.san : `${b.san} (${b.eval})`).join(', ');
+  if (alts) t += `\nOther good moves: ${alts}.`;
   if (facts.threat) t += ` Your opponent threatens ${facts.threat.san}.`;
   if (facts.loosePieces.length) t += ` Loose pieces: ${facts.loosePieces.join('; ')}.`;
   return { text: t, arrows, facts };
@@ -84,3 +94,5 @@ export function extractMove(c: Chess, text: string): string | null {
   }
   return null;
 }
+
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);

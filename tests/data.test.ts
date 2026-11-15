@@ -3,7 +3,7 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { Chess } from 'chess.js';
 import { COURSES } from '../src/data/repertoire';
-import { THEORY_ENDGAMES } from '../src/data/endgames';
+import { THEORY_ENDGAMES, ENDGAME_STUDIES } from '../src/data/endgames';
 import { BANK } from '../src/training/bank';
 import { nodeEngine } from '../src/engine/node';
 import { scoreOf } from '../src/engine/uci';
@@ -23,6 +23,11 @@ describe('repertoire', () => {
       if (l.trap) expect(l.trap.badPly).toBeLessThan(l.san.split(' ').length);
     });
   }
+  it('line and course ids are unique', () => {
+    const ids = COURSES.flatMap((c) => c.lines.map((l) => l.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(COURSES.map((c) => c.id)).size).toBe(COURSES.length);
+  });
   it('openings are identified by name', () => {
     expect(identifyOpening(['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'f8c5'])?.name).toMatch(/Italian/);
     expect(identifyOpening(['e2e4', 'c7c6'])?.name).toMatch(/Caro-Kann/);
@@ -36,6 +41,21 @@ describe('theory endgames: engine agrees with the verdict', () => {
       const s = scoreOf(r.lines[0]);
       if (t.goal === 'win') expect(s, `${t.id} eval ${s}`).toBeGreaterThan(250);
       else expect(Math.abs(s), `${t.id} eval ${s}`).toBeLessThan(80);
+    }, 60000);
+  }
+});
+
+describe('endgame studies: the first move is Stockfish\'s choice and wins', () => {
+  for (const t of ENDGAME_STUDIES) {
+    it(t.title, async () => {
+      const c = new Chess(t.fen);
+      for (const u of t.solution) expect(tryMove(c, u), `${t.id} ${u}`).toBeTruthy();
+      const r = await e.analyze(t.fen, { depth: 22, multipv: 2, movetime: 6000 });
+      expect(scoreOf(r.lines[0])).toBeGreaterThan(200);
+      // the solution move is the best move, or at least as good as it
+      const mine = r.lines.find((l) => l.pv[0] === t.solution[0]);
+      expect(mine, `${t.id}: ${t.solution[0]} not among top moves (${r.lines.map((l) => l.pv[0])})`).toBeTruthy();
+      expect(scoreOf(mine!)).toBeGreaterThan(200);
     }, 60000);
   }
 });

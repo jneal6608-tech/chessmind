@@ -84,9 +84,38 @@ export const THEORY_ENDGAMES: TheoryEndgame[] = [
     steps: ['Stay in the corner (h8/g8).', 'Just shuffle between the two corner squares.', 'Beware: a stalemate is fine for you, so you have no worries.'],
   },
   {
+    id: 'reti', title: 'Réti\'s miracle draw', theme: 'eg_draw', goal: 'draw', rating: 1600,
+    fen: '7K/8/k1P5/7p/8/8/8/8 w - - 0 1',
+    idea: 'Your king looks hopelessly far from Black\'s pawn, but a diagonal king walk chases two goals at once: catch the h-pawn, or help your own c-pawn.',
+    steps: ['Walk the king diagonally (Kg7, Kf6, Ke5): diagonal steps cover two jobs at once.', 'If Black chases your c-pawn, your king supports it.', 'If Black pushes the h-pawn, your king catches it.'],
+  },
+  {
     id: 'q-vs-pawn', title: 'Queen vs. central pawn', theme: 'eg_queen', goal: 'win', rating: 1600,
     fen: '8/8/8/8/8/K7/4pk2/7Q w - - 0 1',
     idea: 'Check and pin until the enemy king is forced in front of its own pawn. Each time it blocks the pawn, your king steps closer.',
     steps: ['Give checks or pin the pawn so the king must step onto the promotion square.', 'Use the free tempo to bring your king closer.', 'Repeat until your king helps win the pawn.'],
+  },
+];
+
+/** Classic endgame tactics (find the moves). Verified by Stockfish in tests/data.test.ts. */
+export interface EndgameStudy { id: string; title: string; fen: string; solution: string[]; rating: number; prompt: string; idea: string }
+export const ENDGAME_STUDIES: EndgameStudy[] = [
+  {
+    id: 'breakthrough', title: 'Pawn breakthrough', rating: 1300, fen: '7k/ppp5/8/PPP5/8/8/8/7K w - - 0 1',
+    solution: ['b5b6', 'a7b6', 'c5c6', 'b7c6', 'a5a6'],
+    prompt: 'Three pawns against three, and Black\'s king is far away. Make a queen.',
+    idea: 'Sacrifice the middle pawn (b6!). Whichever way Black takes, the other pawn sacrifice opens a path, and one of your pawns runs to the queening square before Black\'s king can get there.',
+  },
+  {
+    id: 'knight-promotion', title: 'Promote to a knight', rating: 1400, fen: '8/2P1k3/3q4/8/8/8/6P1/6K1 w - - 0 1',
+    solution: ['c7c8n', 'e7d7', 'c8d6'],
+    prompt: 'Promoting to a queen only draws. Find the winning promotion.',
+    idea: 'A new knight on c8 gives check AND attacks the queen on d6 (a fork). After winning the queen, your king and g-pawn beat the lone king.',
+  },
+  {
+    id: 'saavedra', title: 'The Saavedra position', rating: 1900, fen: '8/8/1KP5/3r4/8/8/8/k7 w - - 0 1',
+    solution: ['c6c7', 'd5d6', 'b6b5', 'd6d5', 'b5b4', 'd5d4', 'b4b3', 'd4d3', 'b3c2', 'd3d4', 'c7c8r', 'd4a4', 'c2b3'],
+    prompt: 'The most famous endgame trick in history. White to move and win.',
+    idea: 'Walk the king toward the rook to escape the checks. When Black sets a stalemate trap (if you make a queen, ...Rc4+ and taking the rook is stalemate), promote to a ROOK instead: now you threaten mate on a1 and the rook on a4 as well.',
   },
 ];

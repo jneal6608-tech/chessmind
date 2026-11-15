@@ -29,7 +29,7 @@ export function verdictWords(cpWhite: number, side: 'w' | 'b'): string {
   return 'you are losing';
 }
 
-export interface Explanation { headline: string; problem: string; better: string; concept: string; recognize: string; lineText: string; replyText: string }
+export interface Explanation { headline: string; problem: string; problemShort: string; feelAfter: string; bestIdea: string; better: string; concept: string; recognize: string; lineText: string; replyText: string }
 
 export function explainMove(m: MoveAnalysis, level: CoachLevel): Explanation {
   const moveNo = Math.floor(m.ply / 2) + 1;
@@ -38,7 +38,7 @@ export function explainMove(m: MoveAnalysis, level: CoachLevel): Explanation {
   const before = verdictWords(m.evalBefore, m.color);
   const after = verdictWords(m.evalAfter, m.color);
   const evalTxt = level === 'beginner' ? '' : ` (engine: ${formatScore(m.evalBefore)} → ${formatScore(m.evalAfter)}, ${m.winLoss.toFixed(0)}% winning chances lost)`;
-  const headline = `${label} was ${CLS_TEXT[m.cls] ?? m.cls}.`;
+  const headline = `${label} was ${CLS_TEXT[m.cls] ?? m.cls}.` + (m.cls === 'blunder' ? ' It changed the game a lot.' : m.cls === 'miss' ? ' You had a chance to win more here.' : '');
   let problem = before === after
     ? `${before[0].toUpperCase()}${before.slice(1)} both before and after this move, but it gives away ${m.winLoss.toFixed(0)}% of your winning chances (${formatScore(m.evalBefore)} → ${formatScore(m.evalAfter)}).`
     : `Before the move ${before}; after it ${after}${evalTxt}.`;
@@ -55,7 +55,14 @@ export function explainMove(m: MoveAnalysis, level: CoachLevel): Explanation {
   const def = tag ? WEAKNESS[tag.key] : undefined;
   const concept = def ? def.lesson : 'Compare candidate moves: checks, captures and threats first, then improve your worst piece.';
   const recognize = def ? recognizeHint(def.key, level) : 'Ask after every opponent move: what changed, and what does it attack?';
-  return { headline, problem, better, concept, recognize, lineText, replyText };
+  const sign = m.color === 'w' ? 1 : -1;
+  const feelAfter = feelWords(m.evalAfter * sign);
+  const problemShort = before === after
+    ? `${cap(before)} both before and after, but this move gave away a big part of your chances.`
+    : `Before this move ${before}. After it, ${after}.`;
+  const bm = m.motifsBest.find((x) => x.kind !== 'check');
+  const bestIdea = bm ? `${cap(bm.text)}.` : '';
+  return { headline, problem, problemShort, feelAfter, bestIdea, better, concept, recognize, lineText, replyText };
 }
 
 function recognizeHint(key: string, level: CoachLevel): string {
@@ -79,3 +86,14 @@ function recognizeHint(key: string, level: CoachLevel): string {
 export function summaryLine(color: 'w' | 'b', acc: number, counts: { blunder: number; mistake: number; inaccuracy: number }) {
   return `${colorName(color)}: ${acc.toFixed(0)}% accuracy, ${counts.blunder} blunder${counts.blunder === 1 ? '' : 's'}, ${counts.mistake} mistake${counts.mistake === 1 ? '' : 's'}, ${counts.inaccuracy} inaccurac${counts.inaccuracy === 1 ? 'y' : 'ies'}.`;
 }
+
+function feelWords(cp: number) {
+  if (cp >= 9000) return 'you still have a forced mate';
+  if (cp <= -9000) return 'you get checkmated';
+  if (cp >= 300) return 'you are still winning';
+  if (cp >= 120) return 'you are still better';
+  if (cp > -40) return 'the position is about equal';
+  if (cp > -300) return 'you are worse';
+  return 'you are losing';
+}
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

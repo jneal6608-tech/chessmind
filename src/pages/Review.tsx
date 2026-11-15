@@ -1,3 +1,4 @@
+import { Explained } from '../ui/Explained';
 // GAME REVIEW: list of games, PGN import, and the interactive review of one
 // game with critical moments taught step by step.
 import { useEffect, useMemo, useState } from 'react';
@@ -13,6 +14,8 @@ import { games as G, ratings } from '../store/db';
 import { saveSettings } from '../store/settings';
 import { splitPgn, parseGame, fetchLichess, fetchChessCom, exportPgn, download, sameGame } from '../services/importer';
 import { explainMove, levelFor, summaryLine } from '../coach/explain';
+import { storyFor, describeMove, type Step } from '../coach/teach';
+import { IdeaLab } from '../ui/IdeaLab';
 import { WEAKNESS, THEME_LABEL } from '../training/themes';
 import { go } from '../services/router';
 import { tryMove, uid, formatLine, START_FEN } from '../chess/util';
@@ -160,6 +163,7 @@ function GameReview({ id }: { id: string }) {
   const [lineStep, setLineStep] = useState(0);
   const [flip, setFlip] = useState<boolean | null>(null);
   const [del, setDel] = useState(false);
+  const [lab, setLab] = useState(false);
   useEffect(() => { if (game && !game.analysis) analyzeSoon(game.id); }, [game?.id, !!game?.analysis]);
 
   const fens = useMemo(() => {
@@ -195,24 +199,24 @@ function GameReview({ id }: { id: string }) {
   let last: [string, string] | undefined = ply >= 0 ? [game.moves[ply].slice(0, 2), game.moves[ply].slice(2, 4)] : undefined;
   let highlights: Record<string, 'hl-good' | 'hl-bad' | 'hl-info'> = {};
   let evalShown: number | null = ma ? ma.evalAfter : a ? a.moves[0]?.evalBefore ?? 0 : null;
+  const mineStory = focusMove ? storyFor(focusMove.fenBefore, [focusMove.uci, ...focusMove.replyLineUci], focusMove.color, level) : null;
+  const bestStory = focusMove ? storyFor(focusMove.fenBefore, focusMove.bestLineUci, focusMove.color, level) : null;
   if (focusMove) {
+    const story = step === 2 ? mineStory : step === 3 ? bestStory : null;
     if (step === 0) { boardFen = focusMove.fenBefore; last = undefined; evalShown = focusMove.evalBefore; if (focusMove.threatUci) arrows = [{ from: focusMove.threatUci.slice(0, 2), to: focusMove.threatUci.slice(2, 4), color: 'yellow' }]; }
-    else if (step === 1 || step === 2) {
+    else if (step === 1) {
       boardFen = focusMove.fenAfter; last = [focusMove.uci.slice(0, 2), focusMove.uci.slice(2, 4)]; evalShown = focusMove.evalAfter;
       highlights = { [focusMove.uci.slice(2, 4)]: 'hl-bad' };
-      if (step === 2 && focusMove.replyLineUci[0]) arrows = [{ from: focusMove.replyLineUci[0].slice(0, 2), to: focusMove.replyLineUci[0].slice(2, 4), color: 'red' }];
-    } else {
-      // Engine continuation, steppable
-      const c = new Chess(focusMove.fenBefore);
-      const line = focusMove.bestLineUci.slice(0, Math.max(1, lineStep));
-      let lm: string | undefined;
-      for (const u of line) { if (!tryMove(c, u)) break; lm = u; }
-      boardFen = step === 3 ? c.fen() : focusMove.fenBefore;
-      last = step === 3 && lm ? [lm.slice(0, 2), lm.slice(2, 4)] : undefined;
-      evalShown = focusMove.evalBefore;
-      if (step !== 3) arrows = [{ from: focusMove.bestUci.slice(0, 2), to: focusMove.bestUci.slice(2, 4), color: 'green' }];
-      if (step === 3) for (const sq of focusMove.motifsBest[0]?.squares ?? []) highlights[sq] = 'hl-info';
-    }
+      if (focusMove.replyLineUci[0]) arrows = [{ from: focusMove.replyLineUci[0].slice(0, 2), to: focusMove.replyLineUci[0].slice(2, 4), color: 'red' }];
+    } else if (story && story.steps.length) {
+      const i = Math.min(lineStep, story.steps.length) - 1;
+      const st = story.steps[Math.max(0, i)];
+      boardFen = i < 0 ? focusMove.fenBefore : st.fenAfter;
+      last = i < 0 ? undefined : [st.uci.slice(0, 2), st.uci.slice(2, 4)];
+      const nx = story.steps[i + 1];
+      if (nx) arrows = [{ from: nx.uci.slice(0, 2), to: nx.uci.slice(2, 4), color: step === 2 ? 'red' : 'green' }];
+      evalShown = null;
+    } else { boardFen = focusMove.fenBefore; last = undefined; }
   } else if (ma && ['inaccuracy', 'mistake', 'blunder', 'miss'].includes(ma.cls)) {
     arrows = [{ from: ma.bestUci.slice(0, 2), to: ma.bestUci.slice(2, 4), color: 'green' }];
   }
@@ -224,7 +228,7 @@ function GameReview({ id }: { id: string }) {
 
   const chart = a ? [{ ply: 0, v: clamp(a.moves[0]?.evalBefore ?? 0) }, ...a.moves.map((m) => ({ ply: m.ply + 1, v: clamp(m.evalAfter) }))] : [];
   const mine = a?.moves.filter((m) => m.color === game.userColor) ?? [];
-  const STEPS = ['Position', 'Your move', 'The problem', 'Better line', 'The idea'];
+  const STEPS = ['Position', 'Your move', 'Why it fails', 'Better move', 'The lesson', 'Try it'];
 
   return (
     <div className="mx-auto w-full max-w-[1320px] px-2 sm:px-6 py-3 sm:py-6 fade-in">
@@ -266,23 +270,34 @@ function GameReview({ id }: { id: string }) {
             <Card><div className="flex items-center gap-3 text-sm"><Spinner /> {q?.gameId === game.id ? `Analysing… ${q.done}/${q.total} positions` : 'Waiting for analysis…'}</div></Card>
           ) : focusMove && ex ? (
             <Card className="border-brass-600/50" title={<span>Critical moment · move {Math.floor(focusMove.ply / 2) + 1}</span>} right={<button className="btn btn-ghost btn-sm" onClick={() => setFocus(null)}>✕</button>}>
-              <div className="mb-3 flex gap-1">{STEPS.map((s, i) => <button key={s} onClick={() => { setStep(i); setLineStep(1); }} className={`flex-1 rounded-md py-1 text-[11px] font-semibold ${i === step ? 'bg-brass-500/25 text-brass-300' : 'bg-ink-800 text-ink-400 hover:text-ink-200'}`}>{i + 1}. {s}</button>)}</div>
+              <div className="mb-3 grid grid-cols-3 sm:grid-cols-6 gap-1">{STEPS.map((s, i) => <button key={s} onClick={() => { if (i === 5) { setLab(true); return; } setStep(i); setLineStep(1); }} className={`rounded-md px-1 py-1 text-[11px] font-semibold ${i === step ? 'bg-brass-500/25 text-brass-300' : 'bg-ink-800 text-ink-400 hover:text-ink-200'}`}>{i + 1}. {s}</button>)}</div>
               <div className="text-sm leading-relaxed text-ink-200 min-h-[120px]">
-                {step === 0 && <p>Here {focusMove.color === 'w' ? 'White' : 'Black'} is to move. {focusMove.threatUci ? <>Your opponent has a threat (yellow arrow: <b>{focusMove.threatSan}</b>). </> : null}Take a moment: what would you play? Look at checks, captures and threats for both sides.</p>}
-                {step === 1 && <p><span className={`font-bold cls-${focusMove.cls}`}>{ex.headline}</span> {focusMove.timeMs !== undefined ? <span className="text-ink-400">(played in {(focusMove.timeMs / 1000).toFixed(0)}s)</span> : null}</p>}
-                {step === 2 && <><p>{ex.problem}</p>{focusMove.tags.length > 1 && <div className="mt-2 flex flex-wrap gap-1">{focusMove.tags.map((t) => <span key={t.key} className="chip" title={t.why}>{WEAKNESS[t.key]?.label ?? t.key} · {Math.round(t.confidence * 100)}%</span>)}</div>}</>}
-                {step === 3 && <>
-                  <p>{ex.better}</p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <button className="btn btn-sm" onClick={() => setLineStep((s) => Math.max(1, s - 1))}>◀</button>
-                    <span className="text-xs text-ink-300 flex-1 font-mono">{formatLine(focusMove.fenBefore, focusMove.bestLine.slice(0, lineStep))}</span>
-                    <button className="btn btn-sm" onClick={() => setLineStep((s) => Math.min(focusMove.bestLineUci.length, s + 1))}>▶</button>
-                  </div>
+                {step === 0 && <>
+                  <p>It's your move as {focusMove.color === 'w' ? 'White' : 'Black'}.{focusMove.threatUci ? <> Careful: your opponent is threatening something (yellow arrow: <b>{focusMove.threatSan}</b>).</> : null}</p>
+                  <p className="mt-2 text-ink-300">Before looking at the answer, ask yourself: what are all the checks, captures and attacks, for you and for them?</p>
+                  <button className="btn btn-sm mt-3" onClick={() => setLab(true)}>Try a move here first</button>
                 </>}
-                {step === 4 && <><p className="font-semibold text-ink-100">{ex.concept}</p><p className="mt-2 text-ink-300">How to spot it next time: {ex.recognize}</p></>}
+                {step === 1 && <>
+                  <p><span className={`font-bold cls-${focusMove.cls}`}>{ex.headline}</span> {focusMove.timeMs !== undefined ? <span className="text-ink-400">(you spent {(focusMove.timeMs / 1000).toFixed(0)}s on it)</span> : null}</p>
+                  <p className="mt-2"><Explained text={describeMove(focusMove.fenBefore, focusMove.uci, focusMove.color)} /></p>
+                  <p className="mt-2 text-ink-300">{ex.problemShort}</p>
+                </>}
+                {step === 2 && mineStory && <>
+                  <p className="font-semibold text-ink-100"><Explained text={focusMove.tags[0]?.why ?? 'Here is what your move allows.'} /></p>
+                  <StoryList steps={mineStory.steps} at={lineStep} onPick={setLineStep} tone="bad" />
+                  <p className="mt-2">So in the end <b className="text-blunder">{mineStory.result}</b>{mineStory.result.includes('checkmat') ? '' : <> and {ex.feelAfter}</>}.</p>
+                  {focusMove.tags.length > 1 && <div className="mt-2 flex flex-wrap gap-1">{focusMove.tags.map((t) => <span key={t.key} className="chip" title={t.why}>{WEAKNESS[t.key]?.label ?? t.key} · {Math.round(t.confidence * 100)}% sure</span>)}</div>}
+                </>}
+                {step === 3 && bestStory && <>
+                  <p className="font-semibold text-ink-100"><Explained text={`The better move was ${focusMove.bestSan}.${ex.bestIdea ? ` ${ex.bestIdea}` : ''}`} /></p>
+                  <StoryList steps={bestStory.steps} at={lineStep} onPick={setLineStep} tone="good" />
+                  <p className="mt-2">That way <b className="text-good">{bestStory.result}</b>.</p>
+                </>}
+                {step === 4 && <><p className="font-semibold text-ink-100"><Explained text={ex.concept} /></p><p className="mt-2 text-ink-300">How to spot it next time: <Explained text={ex.recognize} /></p></>}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                {step < 4 ? <button className="btn btn-primary btn-sm" onClick={() => { setStep(step + 1); setLineStep(1); }}>Next →</button> : null}
+                {step < 4 ? <button className="btn btn-primary btn-sm" onClick={() => { setStep(step + 1); setLineStep(1); }}>Next →</button> : <button className="btn btn-primary btn-sm" onClick={() => setLab(true)}>Try your own ideas</button>}
+                {(step === 2 || step === 3) && <button className="btn btn-sm" onClick={() => setLab(true)}>What if I play something else?</button>}
                 {ownExercise && <button className="btn btn-sm" onClick={() => go(`training/solve/${ownExercise.id}`)}>Practise this position</button>}
                 {similar && <button className="btn btn-sm" onClick={() => go(`training/solve/${similar.id}`)}>Similar exercise ({THEME_LABEL[similar.theme] ?? similar.theme})</button>}
               </div>
@@ -315,7 +330,9 @@ function GameReview({ id }: { id: string }) {
                     {a.lessons.map((l, i) => (
                       <li key={l.key} className="flex gap-3">
                         <span className="h-display text-brass-400 text-lg leading-none">{i + 1}</span>
-                        <div><div className="font-semibold">{WEAKNESS[l.key]?.label ?? l.key}</div><div className="text-ink-300">{l.text}</div>
+                        <div><div className="font-semibold">{WEAKNESS[l.key]?.label ?? l.key}</div>
+                          {(() => { const m = a.moves[l.plies[0]]; const t = m?.tags.find((x) => x.key === l.key); return m && t ? <div className="mt-0.5 text-ink-200">In this game (move {Math.floor(m.ply / 2) + 1}, {m.san}): <Explained text={t.why} /></div> : null; })()}
+                          <div className="mt-1 text-ink-400"><span className="text-brass-300">Rule of thumb:</span> <Explained text={l.text} /></div>
                           <div className="mt-1 flex gap-1 flex-wrap">{l.plies.slice(0, 4).map((p) => <button key={p} className="chip hover:border-brass-500" onClick={() => { setFocus(p); setStep(0); setPly(p); }}>move {Math.floor(p / 2) + 1}</button>)}</div></div>
                       </li>
                     ))}
@@ -356,18 +373,35 @@ function GameReview({ id }: { id: string }) {
                 <span className="text-ink-300"> · {ma.cls}{ma.cls !== 'best' && ma.cls !== 'book' && ma.cls !== 'forced' ? ` · best was ${ma.bestSan}` : ''}</span>
               </div>
               {ma.bestLine.length > 0 && ma.cls !== 'best' && <div className="mt-1 text-xs text-ink-400 font-mono">{formatLine(ma.fenBefore, ma.bestLine.slice(0, 6))}</div>}
-              {ma.tags[0] && <p className="mt-2 text-xs text-ink-300">{ma.tags[0].why}</p>}
+              {ma.tags[0] && <p className="mt-2 text-xs text-ink-300"><Explained text={ma.tags[0].why} /></p>}
               {ma.color === game.userColor && ['mistake', 'blunder', 'miss', 'inaccuracy'].includes(ma.cls) && <button className="btn btn-sm mt-2" onClick={() => { setFocus(ma.ply); setStep(0); }}>Study this move</button>}
             </Card>
           )}
           {a && <p className="px-2 text-[11px] text-ink-500">{summaryLine('w', a.accuracy.w, a.counts.w)} {summaryLine('b', a.accuracy.b, a.counts.b)}</p>}
         </div>
       </div>
+      {lab && focusMove && (
+        <div className="fixed inset-0 z-40 overflow-y-auto bg-ink-950/95 backdrop-blur p-2 sm:p-6">
+          <div className="mx-auto max-w-[1280px]"><IdeaLab fen={focusMove.fenBefore} level={level} theme={data.settings.boardTheme} coords={data.settings.showCoords} onClose={() => setLab(false)}
+            intro={`Move ${Math.floor(focusMove.ply / 2) + 1}: in the game you played ${focusMove.san}. Try any move here, and I'll show you what happens and why.`} /></div>
+        </div>
+      )}
       <Modal open={del} onClose={() => setDel(false)} title="Delete this game?">
         <p className="text-sm text-ink-300">The game and its analysis are removed from your history and weakness profile.</p>
         <div className="mt-4 flex justify-end gap-2"><button className="btn" onClick={() => setDel(false)}>Cancel</button><button className="btn btn-primary" onClick={async () => { await G.del(game.id); go('review'); }}>Delete</button></div>
       </Modal>
     </div>
+  );
+}
+function StoryList({ steps, at, onPick, tone }: { steps: Step[]; at: number; onPick: (n: number) => void; tone: 'good' | 'bad' }) {
+  return (
+    <ol className="mt-2 space-y-1">
+      {steps.map((st, j) => (
+        <li key={j} role="button" tabIndex={0} onClick={() => onPick(j + 1)} onKeyDown={(e) => e.key === 'Enter' && onPick(j + 1)} className={`cursor-pointer w-full text-left rounded-md px-2 py-1 ${j + 1 === at ? (tone === 'bad' ? 'bg-blunder/15 text-ink-100' : 'bg-good/15 text-ink-100') : 'text-ink-300 hover:bg-ink-800'}`}>
+          <span className="font-mono text-xs text-ink-500 mr-1.5">{j + 1}.</span><Explained text={st.text} /></li>
+      ))}
+      <li className="text-[11px] text-ink-500 px-2">Click a step to see it on the board.</li>
+    </ol>
   );
 }
 const clamp = (cp: number) => Math.max(-6, Math.min(6, cp / 100));

@@ -1,3 +1,4 @@
+import { Explained } from '../ui/Explained';
 // DASHBOARD: the five questions, answered from your data.
 import { useEffect, useState } from 'react';
 import { Page, Card, Empty, Spinner, Stat, ResultBadge, fmtDate } from '../ui/common';
@@ -71,7 +72,7 @@ export function DashboardPage() {
                   <div className="h-display text-2xl text-brass-400 w-6">{i + 1}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2"><span className="font-semibold">{w.label}</span><span className="chip">{STATUS_LABEL[w.status]}</span><span className="text-xs text-ink-400">{w.incidents}× in {w.gamesAffected} game{w.gamesAffected === 1 ? '' : 's'}{w.inLosses ? ` · ${w.inLosses} in losses` : ''} · confidence {Math.round(w.confidence * 100)}%</span></div>
-                    <p className="mt-1 text-sm text-ink-300">{WEAKNESS[w.key]?.lesson}</p>
+                    <p className="mt-1 text-sm text-ink-300"><Explained text={WEAKNESS[w.key]?.lesson ?? ''} /></p>
                     {w.examples[0] && <p className="mt-1 text-xs text-ink-500 italic truncate">e.g. {w.examples[w.examples.length - 1].why}</p>}
                   </div>
                   <button className="btn btn-sm self-center" onClick={() => go(`training/session/weakness/${w.key}`)}>Train</button>

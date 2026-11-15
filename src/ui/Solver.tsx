@@ -1,3 +1,4 @@
+import { Explained } from './Explained';
 // Solves one exercise. Tactics: find the move(s); engine-checked alternatives
 // that are just as good are accepted. Endgames: play the position out against
 // Stockfish until the goal is reached or missed.
@@ -13,6 +14,9 @@ import { THEME_LABEL } from '../training/themes';
 import { attempts, srs } from '../store/db';
 import { nextCard } from '../training/srs';
 import { playSound } from '../services/sound';
+import { tryIdea, storyFor, type Verdict, type Step } from '../coach/teach';
+import { useAppData } from '../services/data';
+import { levelFor } from '../coach/explain';
 
 export interface SolveResult { success: boolean; timeMs: number; hints: number }
 
@@ -28,6 +32,10 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
   const [recorded, setRecorded] = useState(false);
   const [userPlies, setUserPlies] = useState(0);
   const [promoted, setPromoted] = useState(false);
+  const [why, setWhy] = useState<Verdict | null>(null);
+  const [showStep, setShowStep] = useState<{ steps: Step[]; i: number } | null>(null);
+  const [appData] = useAppData();
+  const level = appData ? levelFor(appData.strength.rating, appData.settings.coachLevel) : 'beginner';
   const t0 = useRef(Date.now());
   const token = useRef(0);
   const side = new Chess(ex.fen).turn();
@@ -36,7 +44,7 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
 
   useEffect(() => {
     setFen(ex.fen); setStep(0); setState('solving'); setMsg(''); setHints(0); setArrows([]); setHighlights({}); setLast(undefined);
-    setRecorded(false); setUserPlies(0); setPromoted(false); t0.current = Date.now(); token.current++;
+    setRecorded(false); setUserPlies(0); setPromoted(false); setWhy(null); setShowStep(null); t0.current = Date.now(); token.current++;
     // A defence exercise: show where the threat comes from only on request (hint).
   }, [ex.id]);
 
@@ -54,6 +62,7 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
 
   async function onMove(uci: string) {
     if (state !== 'solving' && state !== 'wrong') return;
+    setWhy(null); setShowStep(null);
     const c = new Chess(fen);
     const mv = tryMove(c, uci);
     if (!mv) return;
@@ -83,8 +92,10 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
       } catch (e) { if (e instanceof EngineCancelled) return; }
       if (!ok) {
         setState('wrong'); setHighlights({ [uci.slice(2, 4)]: 'hl-bad' });
-        setMsg(`${mv.san} is not it.${recorded ? '' : ' Try again, or show the solution.'}`);
+        setMsg(`${mv.san} is not it. Here's why:`);
         void record(false);
+        // Explain the failure in plain words, then put the position back for another try.
+        tryIdea(coachEngine, fen, uci, level).then((v) => { if (mine === token.current) { setWhy({ ...v, better: undefined }); } }).catch(() => undefined);
         setTimeout(() => { if (mine === token.current) { setFen(fen); setLast(undefined); setHighlights({}); setState('wrong'); } }, 900);
         return;
       }
@@ -195,7 +206,7 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
       <div className="mx-auto w-full max-w-[min(100%,calc(100vh-190px))]">
-        <Board fen={fen} orientation={orientation} movable={state === 'solving' || state === 'wrong' ? orientation : 'none'} onMove={onMove} lastMove={last} arrows={arrows} highlights={highlights} />
+        <Board fen={fen} orientation={orientation} movable={(state === 'solving' || state === 'wrong') && !showStep ? orientation : 'none'} onMove={onMove} lastMove={last} arrows={arrows} highlights={highlights} />
       </div>
       <div className="space-y-3">
         <div className="card p-4">
@@ -207,12 +218,26 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
             <span className={`h-4 w-4 rounded-full ring-1 ${side === 'w' ? 'bg-ink-100 ring-black/40' : 'bg-ink-950 ring-ink-400'}`} />
             <span className="font-semibold">{side === 'w' ? 'White' : 'Black'} to move · {goalText}</span>
           </div>
-          {ex.prompt && <p className="mt-2 text-sm text-ink-300">{ex.prompt}</p>}
+          {ex.prompt && <p className="mt-2 text-sm text-ink-300"><Explained text={ex.prompt} /></p>}
           {ex.played && <p className="mt-1 text-xs text-ink-400">In the game you played {sanOf(ex.fen, ex.played)}.</p>}
-          {msg && <p className={`mt-3 text-sm ${state === 'solved' ? 'text-good' : state === 'failed' || state === 'wrong' ? 'text-mistake' : 'text-ink-200'}`}>{msg}</p>}
+          {msg && <p className={`mt-3 text-sm ${state === 'solved' ? 'text-good' : state === 'failed' || state === 'wrong' ? 'text-mistake' : 'text-ink-200'}`}><Explained text={msg} /></p>}
+          {why && !why.ok && (
+            <div className="mt-2 rounded-lg bg-blunder/10 ring-1 ring-blunder/30 p-3 text-sm">
+              <p className="text-ink-100"><Explained text={why.reason} /></p>
+              <ol className="mt-2 space-y-1">{why.story.map((st, j) => <li key={j}><button className="text-left text-ink-300 hover:text-ink-100" onClick={() => { setShowStep({ steps: why.story, i: j }); setFen(st.fenAfter); setLast([st.uci.slice(0, 2), st.uci.slice(2, 4)]); }}><span className="font-mono text-xs text-ink-500 mr-1">{j + 1}.</span></button><Explained text={st.text} /></li>)}</ol>
+              <p className="mt-2 text-ink-300">Result: <b className="text-ink-100">{why.result}</b>.</p>
+              {showStep && <button className="btn btn-sm mt-2" onClick={() => { setShowStep(null); setFen(ex.fen); setLast(undefined); }}>Back to the puzzle</button>}
+            </div>
+          )}
+          {state === 'solved' && !playout && (() => { const st = storyFor(ex.fen, ex.solution.length > 1 ? ex.solution : ex.solution, side, level); return st.steps.length ? (
+            <div className="mt-2 rounded-lg bg-good/10 ring-1 ring-good/30 p-3 text-sm">
+              <div className="label !text-[10px]">Why the solution works</div>
+              <ol className="mt-1 space-y-1">{st.steps.map((x, j) => <li key={j} className="text-ink-200"><span className="font-mono text-xs text-ink-500 mr-1">{j + 1}.</span><Explained text={x.text} /></li>)}</ol>
+              <p className="mt-1 text-ink-300">Result: <b className="text-ink-100">{st.result}</b>.</p>
+            </div>) : null; })()}
           {state === 'checking' && <p className="mt-3 text-sm text-ink-300 flex items-center gap-2"><Spinner /> Checking your move with Stockfish…</p>}
           {state === 'replying' && playout && <p className="mt-3 text-sm text-ink-300 flex items-center gap-2"><Spinner /> Engine is thinking…</p>}
-          {playout && ex.explanation && <p className="mt-3 text-xs text-ink-400">{ex.explanation}</p>}
+          {playout && ex.explanation && <p className="mt-3 text-xs text-ink-400"><Explained text={ex.explanation} /></p>}
         </div>
         <div className="grid grid-cols-2 gap-2">
           {!done ? <>
