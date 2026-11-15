@@ -13,6 +13,11 @@ All data stays in the browser's IndexedDB (export/import backups in Settings).
 Requires Node 20+.
 
 ```bash
+git clone https://github.com/jneal6608-tech/chessmind.git
+cd chessmind
+```
+
+```bash
 npm install
 npm run dev        # http://localhost:5173
 ```
@@ -31,10 +36,9 @@ npm run preview    # serve the build at http://localhost:4173
 The build is a static site (`dist/`) with relative paths and hash routing, so it
 works on any static host and in sub-folders, with no rewrite rules.
 
-- **Netlify:** connect the repo, set the base directory to `chessmind/` (if it
-  lives in a sub-folder); `netlify.toml` supplies the build command and output.
-- **Vercel:** import the repo, set the root directory to `chessmind/`;
-  `vercel.json` supplies the rest.
+- **Netlify:** Add new site → Import from Git → pick this repo. `netlify.toml`
+  supplies the build command and output folder.
+- **Vercel:** import the repo; `vercel.json` supplies the rest.
 - **Anything else:** `npm run build`, upload `dist/`.
 
 The engine is the single-threaded "lite" Stockfish 19 build, so no special
