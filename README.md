@@ -137,7 +137,7 @@ play-outs vs Stockfish, the coach, opening practice, and layouts at phone width.
   your real ratings.
 - **Cause classification is heuristic.** Each cause carries a confidence; low
   confidence is shown as such.
-- **The exercise bank is modest** (about 600 positions), weighted toward
+- **The exercise bank is modest** (about 650 positions plus 13 theory endgames), weighted toward
   material-winning tactics and defence; mates and skewers are fewer. Your own
   games add exercises continuously, and the generator can be run longer.
 - **Lichess / Chess.com import** uses their public APIs from the browser; it
