@@ -98,3 +98,53 @@ the browser and sent only to `api.anthropic.com`.
 ## Licences
 Stockfish (GPLv3), chessground (GPLv3), chess.js (BSD-2), cburnett pieces
 (GPLv2+), Lichess chess-openings names (CC0). ChessMind is therefore GPLv3.
+
+## Tests
+
+`npm test` runs 86 tests (Vitest, Stockfish running in Node):
+
+- **Rules** (`tests/rules.test.ts`): legal destinations, pins, castling (both
+  sides, through/out of check, lost rights), en passant (and its expiry),
+  promotion incl. under-promotion and capture-promotion, checkmate, stalemate,
+  threefold repetition, insufficient material, static exchange evaluation,
+  position sanity checks.
+- **Patterns** (`tests/motifs.test.ts`): forks, pins, skewers, discovered
+  attacks, hanging pieces, mates, back-rank mate vs. other mates.
+- **Engine** (`tests/engine.test.ts`): start-up, mate detection, MultiPV,
+  cancellation, termination and restart, every level and personality.
+- **Analysis** (`tests/analysis.test.ts`): classification, causes and confidence
+  on real games, recurring vs one-time weaknesses, strength estimate, exercises
+  from your own mistakes, built-in coach answers.
+- **Training** (`tests/training.test.ts`): spaced repetition, adaptive theme
+  ratings, exercise selection order.
+- **Persistence & import** (`tests/store.test.ts`): IndexedDB round trip,
+  backup export/import (API key excluded), PGN parsing with clock times.
+- **Data** (`tests/data.test.ts`): every repertoire line is legal, every theory
+  endgame has the verdict we teach (checked by Stockfish at depth 22), every bank
+  exercise has a legal solution.
+
+Browser flows were checked with Playwright: playing full games (click and
+drag), illegal moves, takebacks, reload persistence, checkmate, resign,
+promotion, review walkthrough, PGN import, exercise solving and hints, endgame
+play-outs vs Stockfish, the coach, opening practice, and layouts at phone width.
+
+## Known limitations
+
+- **Opponent ratings are approximate.** Levels are tuned by search depth and
+  move choice, not calibrated against human players.
+- **The strength estimate is ChessMind's own number** from results against its
+  opponents (and rated imported games). It is shown next to, never in place of,
+  your real ratings.
+- **Cause classification is heuristic.** Each cause carries a confidence; low
+  confidence is shown as such.
+- **The exercise bank is modest** (about 600 positions), weighted toward
+  material-winning tactics and defence; mates and skewers are fewer. Your own
+  games add exercises continuously, and the generator can be run longer.
+- **Lichess / Chess.com import** uses their public APIs from the browser; it
+  could not be tested from the build sandbox (no network access to those
+  sites). PGN paste/file import is fully tested.
+- **The Claude coach** is optional and was not tested live (no API key in the
+  build environment). The browser holds the key, which is only appropriate for
+  a personal, single-user install.
+- **Analysis depth** defaults to 12 for speed on Chromebooks; deeper settings
+  are available but slower.
