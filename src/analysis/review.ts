@@ -10,7 +10,7 @@ import { identifyOpening, isBookPosition } from '../openings/identify';
 import { WEAKNESS } from '../training/themes';
 import type { GameAnalysis, GameRecord, MoveAnalysis, MoveClass, PhaseStats, Counts } from './types';
 
-export const ANALYSIS_VERSION = 3;
+export const ANALYSIS_VERSION = 4;
 
 /** Lichess move accuracy from win-chance loss (percentage points). */
 export function moveAccuracy(winLoss: number): number {

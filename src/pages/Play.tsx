@@ -126,6 +126,7 @@ export function PlayPage() {
       turnStart: Date.now(), takebacks: 0, startedAt: Date.now(),
     });
     void kv.set('playSetup', setup);
+    window.scrollTo({ top: 0 });
   }
 
   function endReason(c: Chess): { result: GameRecord['result']; reason: string } | undefined {
@@ -343,7 +344,7 @@ export function PlayPage() {
             {engineError && <p className="mt-2 text-sm text-blunder">{engineError}</p>}
           </Card>
           <Card className="!p-2">
-            <div className="h-[220px] lg:h-[320px]">
+            <div className="h-[130px] sm:h-[220px] lg:h-[320px]">
               <MoveList sans={sans} current={viewPly ?? sans.length - 1} onSelect={(i) => setViewPly(i === sans.length - 1 ? null : i)} />
             </div>
             <div className="mt-2 flex justify-between gap-1 border-t border-ink-700 pt-2">

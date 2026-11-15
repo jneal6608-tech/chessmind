@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 
 export function Page({ title, subtitle, actions, children }: { title: string; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
@@ -52,12 +52,21 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
   );
 }
 export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+  useEffect(() => {
+    if (!open) return;
+    const f = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', f);
+    return () => window.removeEventListener('keydown', f);
+  }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="card-hi w-full max-w-md p-5 fade-in" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
-        <h3 className="h-display text-xl mb-3">{title}</h3>
-        {children}
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex min-h-full items-start sm:items-center justify-center p-3 sm:p-4">
+        <div className="card-hi relative w-full max-w-md p-5 fade-in" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
+          <button className="btn btn-ghost btn-sm absolute right-2 top-2" onClick={onClose} aria-label="Close">✕</button>
+          <h3 className="h-display text-xl mb-3 pr-8">{title}</h3>
+          {children}
+        </div>
       </div>
     </div>
   );

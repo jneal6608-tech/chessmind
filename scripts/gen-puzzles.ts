@@ -72,7 +72,10 @@ async function considerTactic(fen: string, prevScoreForMover: number) {
   const s0 = scoreOf(ls[0]);
   if (s0 < 250 || !clearlyBest(ls[0], ls[1], 20)) return;
   f('t_unique');
-  if (prevScoreForMover > 150) return; f('t_fresh'); // already winning before the blunder: not a puzzle moment
+  const stale = prevScoreForMover > 150; // already winning before the last move
+  const quickMotifs = detectLineMotifs(fen, ls[0].pv).motifs.map((m) => m.kind);
+  const rich = (ls[0].mate !== undefined && ls[0].mate > 0 && ls[0].mate <= 3) || quickMotifs.some((k) => ['fork', 'pin', 'skewer', 'discovered', 'back_rank_mate', 'mate'].includes(k));
+  if (stale && !rich) return; f('t_fresh'); // patterns and mates are puzzles even in a better position winning before the blunder: not a puzzle moment
   const deep = await e.analyze(fen, { depth: 16, multipv: 2 });
   if (deep.lines.length < 2 || deep.lines[0].pv[0] !== ls[0].pv[0]) return;
   if (!clearlyBest(deep.lines[0], deep.lines[1], 18)) return;

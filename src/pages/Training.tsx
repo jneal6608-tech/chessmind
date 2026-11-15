@@ -1,7 +1,7 @@
 // TRAINING: daily challenge, weakness training, tactics, endgames, your own
 // mistakes and spaced-repetition reviews.
 import { useEffect, useMemo, useState } from 'react';
-import { Page, Card, Empty, Spinner, Bar, Segmented } from '../ui/common';
+import { Page, Card, Empty, Spinner, Bar } from '../ui/common';
 import { Solver, type SolveResult } from '../ui/Solver';
 import { useAppData, type AppData } from '../services/data';
 import { daily as DAILY } from '../store/db';
@@ -187,7 +187,7 @@ function Session({ data, mode, theme }: { data: AppData; mode: string; theme?: s
       ) : (
         <Solver key={ex.id + idx} ex={ex} mode={mode} onDone={onDone} onNext={() => setIdx(idx + 1)} />
       )}
-      {!finished && <div className="mt-3 flex justify-center"><Segmented value="x" onChange={() => setIdx(list.length)} options={[{ value: 'end', label: 'End session' }]} /></div>}
+      {!finished && <div className="mt-3 flex justify-center"><button className="btn btn-ghost btn-sm" onClick={() => setIdx(list.length)}>End session</button></div>}
     </div>
   );
 }

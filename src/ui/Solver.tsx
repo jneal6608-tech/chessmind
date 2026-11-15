@@ -136,7 +136,9 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
       if (c.isDraw() || c.isStalemate()) { finishPlayout(ex.goal === 'draw', 'The game is drawn.'); return; }
       if (ex.goal === 'win') {
         const m = material(c);
-        const oppBare = (side === 'w' ? m.b : m.w) === 0;
+        const m0 = material(new Chess(ex.fen));
+        // "Bare king" only counts as converted if the opponent started with material to lose.
+        const oppBare = (side === 'w' ? m.b : m.w) === 0 && (side === 'w' ? m0.b : m0.w) > 0;
         if (my < 120) { finishPlayout(false, 'The win slipped away: the engine now thinks the position is no longer winning.'); return; }
         if ((nowPromoted || (oppBare && ex.theme !== 'eg_mate')) && my >= 500 && ex.theme !== 'eg_mate') { finishPlayout(true, nowPromoted ? 'Promoted with a winning position. Converted!' : 'Converted!'); return; }
       } else {

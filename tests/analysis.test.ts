@@ -101,3 +101,13 @@ describe('built-in coach', () => {
     expect(extractMove(new Chess(fen), 'what about g6?')).toBe('g7g6');
   });
 });
+
+describe('unsound sacrifice', () => {
+  it('flags a Bxf7+ that just loses a piece', async () => {
+    const g = gameFrom('[Result "*"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Bxf7+ Kxf7 *', 'w');
+    g.analysis = await reviewGame(g, e, 12);
+    const m = g.analysis.moves.find((x) => x.san === 'Bxf7+')!;
+    expect(['mistake', 'blunder']).toContain(m.cls);
+    expect(m.tags.map((t) => t.key)).toContain('unsound_sacrifice');
+  });
+});

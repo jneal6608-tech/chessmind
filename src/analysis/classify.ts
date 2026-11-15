@@ -110,6 +110,14 @@ export function classifyMove(m: MoveAnalysis, all: MoveAnalysis[], ctx: Ctx): Ta
     }
   }
 
+  // Gave material away on purpose (a capture or check that loses material), without enough for it.
+  if (big && playedMove && (playedMove.captured || playedMove.san.includes('+'))) {
+    const net = playedMove.captured ? seeMove(m.fenBefore, m.uci) : -see(m.fenAfter, mv.to);
+    if (net <= -2 && moverAfter < moverBefore - 150) {
+      add('unsound_sacrifice', 0.65, `${m.san} gives up material (about ${Math.abs(net)} points) but the attack does not pay it back: ${m.replyLine.slice(0, 4).join(' ')}.`);
+    }
+  }
+
   // ---------- 3. Time ----------
   if (m.timeMs !== undefined && ctx.medianTime && (m.cls === 'blunder' || m.cls === 'mistake')) {
     if (m.timeMs < Math.max(3000, ctx.medianTime * 0.4)) {

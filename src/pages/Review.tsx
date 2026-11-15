@@ -306,7 +306,8 @@ function GameReview({ id }: { id: string }) {
                     </div>
                   ))}
                 </div>
-                <p className="mt-3 text-[11px] text-ink-500">Stockfish depth {a.depth}. Accuracy measures how close your moves were to the engine's; it is not a rating.</p>
+                <p className="mt-3 text-xs text-ink-300">Best or excellent moves: <b className="text-best">{a.counts[game.userColor].best}</b> of {mine.filter((m) => m.cls !== 'forced').length}{game.opening ? ` · left the book after move ${Math.ceil(game.opening.ply / 2)}` : ''}</p>
+                <p className="mt-2 text-[11px] text-ink-500">Stockfish depth {a.depth}. Accuracy measures how close your moves were to the engine's; it is not a rating.</p>
               </Card>
               {a.lessons.length > 0 && (
                 <Card title="Three lessons from this game">

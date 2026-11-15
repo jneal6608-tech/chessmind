@@ -52,6 +52,7 @@ export const WEAKNESSES: WeaknessDef[] = [
   // Decision-making
   { key: 'moving_fast', label: 'Moving too quickly', category: 'calculation', train: ['defense', 'advantage'], lesson: 'Your worst mistakes came on quick moves. In tense positions, slow down and run a blunder check.' },
   { key: 'ignored_forcing', label: 'Ignoring forcing moves', category: 'calculation', train: ['mate_in_2', 'fork', 'discovered'], lesson: 'Checks, captures and threats first: for you and for your opponent, every move.' },
+  { key: 'unsound_sacrifice', label: 'Unsound sacrifices', category: 'calculation', train: ['defense', 'advantage'], lesson: 'Before giving up material, calculate the follow-up to the end: what exactly do you get back, and what is your opponent\'s best defence?' },
   { key: 'no_blunder_check', label: 'Missing simple replies', category: 'calculation', train: ['defense', 'capture_hanging'], lesson: 'Before playing a move, look at your opponent\'s checks and captures after it. Most blunders fail to a one-move reply.' },
 ];
 export const WEAKNESS: Record<string, WeaknessDef> = Object.fromEntries(WEAKNESSES.map((w) => [w.key, w]));
