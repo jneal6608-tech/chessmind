@@ -17,7 +17,7 @@ import { explainMove, levelFor, summaryLine } from '../coach/explain';
 import { storyFor, describeMove, type Step } from '../coach/teach';
 import { IdeaLab } from '../ui/IdeaLab';
 import { AnalysisBoard } from '../ui/AnalysisBoard';
-import { CLASS_LABEL, CLASS_MEANING, CLASS_ORDER } from '../ui/classes';
+import { CLASS_LABEL, CLASS_MEANING, CLASS_ORDER, badgeFor } from '../ui/classes';
 import { compareMoves, alternativeCaptures, type Comparison } from '../coach/compare';
 import { WEAKNESS, THEME_LABEL } from '../training/themes';
 import { go } from '../services/router';
@@ -182,8 +182,8 @@ function GameReview({ id }: { id: string }) {
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if (!game || (e.target as HTMLElement).tagName === 'INPUT' || document.querySelector('[data-explorer]')) return;
-      if (e.key === 'ArrowLeft') { setFocus(null); setPly((p) => Math.max(-1, p - 1)); }
-      if (e.key === 'ArrowRight') { setFocus(null); setPly((p) => Math.min(game.moves.length - 1, p + 1)); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setFocus(null); setPly((p) => Math.max(-1, p - 1)); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); setFocus(null); setPly((p) => Math.min(game.moves.length - 1, p + 1)); }
     };
     window.addEventListener('keydown', f);
     return () => window.removeEventListener('keydown', f);
@@ -226,6 +226,10 @@ function GameReview({ id }: { id: string }) {
     arrows = [{ from: ma.bestUci.slice(0, 2), to: ma.bestUci.slice(2, 4), color: 'green' }];
   }
 
+  // Label bubble on the square the move landed on (normal move-by-move view, and step 2 of a critical moment).
+  let badge: ReturnType<typeof badgeFor> | undefined;
+  if (!focusMove && ma) badge = badgeFor(ma.uci.slice(2, 4), ma.cls);
+  else if (focusMove && step === 1) badge = badgeFor(focusMove.uci.slice(2, 4), focusMove.cls);
   const ex = focusMove ? explainMove(focusMove, level) : null;
   const ownExercise = focusMove ? data.exercises.find((e) => e.id === `game-${game.id}-${focusMove.ply}`) : undefined;
   const similarTheme = ownExercise?.theme ?? (focusMove?.tags[0] ? WEAKNESS[focusMove.tags[0].key]?.train[0] : undefined);
@@ -254,7 +258,7 @@ function GameReview({ id }: { id: string }) {
         <div>
           <div className="mx-auto flex w-full max-w-[min(100%,calc(100vh-180px))] gap-2">
             <EvalBar cp={evalShown} flipped={orientation === 'black'} />
-            <div className="flex-1 min-w-0"><Board fen={boardFen} orientation={orientation} movable="none" lastMove={last} arrows={arrows} highlights={highlights} theme={data.settings.boardTheme} coords={data.settings.showCoords} /></div>
+            <div className="flex-1 min-w-0"><Board fen={boardFen} orientation={orientation} movable="none" lastMove={last} arrows={arrows} highlights={highlights} badge={badge} theme={data.settings.boardTheme} coords={data.settings.showCoords} /></div>
           </div>
           {a && (
             <div className="mt-3 card p-2 h-28">

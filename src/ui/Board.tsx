@@ -20,6 +20,8 @@ export interface BoardProps {
   theme?: string;
   coords?: boolean;
   animation?: boolean;
+  /** A label bubble in the top-right corner of a square (e.g. the move just played: "??", "!", "★"). */
+  badge?: { square: string; cls: string; glyph: string; title?: string };
 }
 
 const BRUSH: Record<string, string> = { green: 'green', red: 'red', blue: 'blue', yellow: 'yellow' };
@@ -106,6 +108,14 @@ export function Board(p: BoardProps) {
   const shell = (
     <div className={`board-shell theme-${p.theme ?? 'walnut'}`}>
       <div ref={el} className="cg-wrap" />
+      {p.badge && (() => {
+        const f = p.badge.square.charCodeAt(0) - 97, r = Number(p.badge.square[1]) - 1;
+        const col = white ? f : 7 - f, row = white ? 7 - r : r;
+        return (
+          <div key={p.badge.square + p.badge.cls} className={`move-badge bg-cls-${p.badge.cls}`} title={p.badge.title}
+            style={{ left: `${(col + 1) * 12.5}%`, top: `${row * 12.5}%` }}>{p.badge.glyph}</div>
+        );
+      })()}
       {promo && (
         <div className="promo-overlay" onClick={cancelPromo} role="dialog" aria-label="Choose promotion piece">
           <div className="flex w-full justify-center" onClick={(e) => e.stopPropagation()}>

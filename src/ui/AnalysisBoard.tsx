@@ -9,7 +9,7 @@ import { EvalBar } from './EvalBar';
 import { MoveList } from './MoveList';
 import { Spinner } from './common';
 import { Explained } from './Explained';
-import { CLASS_LABEL, CLASS_MEANING } from './classes';
+import { CLASS_LABEL, CLASS_MEANING, badgeFor } from './classes';
 import { coachEngine } from '../engine/browser';
 import { scoreOf, winPct, formatScore, EngineCancelled, type EvalLine } from '../engine/uci';
 import { tryMove, pvToSan, formatLine, sanOf } from '../chess/util';
@@ -158,7 +158,8 @@ export function AnalysisBoard(p: AnalysisBoardProps) {
           {showEngine && <EvalBar cp={evalWhite} flipped={flip} thinking={thinking} />}
           <div className="flex-1 min-w-0">
             <Board fen={fen} orientation={flip ? 'black' : 'white'} movable="both" onMove={(u) => play([u])}
-              lastMove={lastMove ? [lastMove.slice(0, 2), lastMove.slice(2, 4)] : undefined} arrows={arrows} theme={p.theme} coords={p.coords} />
+              lastMove={lastMove ? [lastMove.slice(0, 2), lastMove.slice(2, 4)] : undefined} arrows={arrows} theme={p.theme} coords={p.coords}
+              badge={lastMove && lastCls ? badgeFor(lastMove.slice(2, 4), lastCls) : undefined} />
           </div>
         </div>
         <div className="mt-2 flex flex-wrap justify-center gap-1">
@@ -182,6 +183,15 @@ export function AnalysisBoard(p: AnalysisBoardProps) {
         </div>
 
         {gameSan && cur === 0 && <p className="text-xs text-ink-400">In the game, <b className="text-ink-200">{gameSan}</b> was played here.</p>}
+
+        {line.length > 0 && (
+          <div>
+            <div className="h-[120px] rounded-lg bg-ink-900 p-1">
+              <MoveList sans={sans} current={cur - 1} classes={classes} startPly={plyOf(p.fen)} onSelect={(i) => setIdx(i + 1)} />
+            </div>
+            <p className="mt-1 text-[11px] text-ink-500">Click a move to jump to it. Playing a different move there starts a new line. ← → keys step through.</p>
+          </div>
+        )}
 
         {/* The move just played in the variation */}
         {lastMove && (
@@ -264,13 +274,6 @@ export function AnalysisBoard(p: AnalysisBoardProps) {
           </div>
         )}
 
-        <div>
-          <div className="label mb-1">Your line</div>
-          <div className="h-[150px] rounded-lg bg-ink-900 p-1">
-            <MoveList sans={sans} current={cur - 1} classes={classes} startPly={plyOf(p.fen)} onSelect={(i) => setIdx(i + 1)} />
-          </div>
-          {line.length > 0 && <p className="mt-1 text-[11px] text-ink-500">Click a move to go back to it. Playing a different move there starts a new line. ← → keys step through.</p>}
-        </div>
       </div>
     </div>
   );

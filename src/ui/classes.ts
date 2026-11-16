@@ -23,3 +23,12 @@ export const CLASS_MEANING: Record<MoveClass, string> = {
   forced: 'The only legal move.',
 };
 export const CLASS_ORDER: MoveClass[] = ['brilliant', 'great', 'best', 'excellent', 'good', 'book', 'inaccuracy', 'mistake', 'miss', 'blunder'];
+
+/** Glyph shown in the bubble on the board. */
+export const BADGE_GLYPH: Record<MoveClass, string> = {
+  brilliant: '!!', great: '!', best: '★', excellent: '👍', good: '✓', book: '📖',
+  inaccuracy: '?!', mistake: '?', miss: '✕', blunder: '??', forced: '→',
+};
+export function badgeFor(square: string, cls: MoveClass) {
+  return { square, cls, glyph: BADGE_GLYPH[cls], title: `${CLASS_LABEL[cls]}: ${CLASS_MEANING[cls]}` };
+}
