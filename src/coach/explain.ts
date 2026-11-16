@@ -13,6 +13,7 @@ export function levelFor(rating: number, override: string): CoachLevel {
 
 const CLS_TEXT: Record<string, string> = {
   blunder: 'a blunder', mistake: 'a mistake', inaccuracy: 'an inaccuracy', miss: 'a missed opportunity',
+  brilliant: 'a brilliant move (a sound sacrifice)', great: 'a great move (the only good move here)',
   best: 'the best move', excellent: 'an excellent move', good: 'a good move', book: 'a book move', forced: 'the only legal move',
 };
 

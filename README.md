@@ -56,6 +56,24 @@ headers (COOP/COEP) are needed.
   normally; tap one to see a short definition.
 - **Board labels.** Files a–h and ranks 1–8 are printed around the board.
 
+## Analysis tools
+
+- **Every move rated.** Each move in a reviewed game gets a label: Brilliant (a sound
+  sacrifice), Great (the only good move), Best, Excellent, Good, Book, Inaccuracy,
+  Mistake, Miss or Blunder. Click any move to see why.
+- **Why this move and not that one.** For every move that wasn't the best, the review
+  compares it with Stockfish's choice in concrete terms: material at the end of each
+  line, pawn structure, king safety, development, loose pieces, and what the
+  opponent's reply does.
+- **Tactics that actually work.** Forks, pins, skewers, discovered attacks and
+  "attacking the knight" are only mentioned when they win something after the
+  opponent's best defence (`src/chess/tactics.ts`). Captures say whether the piece was
+  defended (a trade) or free.
+- **Analysis board** (`#/analysis`, and "Analyse from here" in every review): play your
+  own follow-ups for both sides with a live evaluation bar, Stockfish's top three lines,
+  a label for each move you try, and "which capture is better?" when a piece can be
+  taken more than one way.
+
 ## What is in it
 
 | Area | Where |
@@ -72,7 +90,7 @@ headers (COOP/COEP) are needed.
 | Coach: explanations, plain-words stories and "try it" verdicts (`teach.ts`), built-in Q&A, optional Claude | `src/coach/*` |
 | Persistence (IndexedDB), backups | `src/store/*` |
 | Screens | `src/pages/*`, `src/ui/*` |
-| Data: 14 opening courses, theory endgames and studies, glossary, opening names, exercise bank | `src/data/*` |
+| Data: 24 opening courses, theory endgames and studies, glossary, opening names, exercise bank | `src/data/*` |
 
 ### How mistakes are classified
 For each of your inaccuracies, mistakes, blunders and missed wins the reviewer

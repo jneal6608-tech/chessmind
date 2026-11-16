@@ -8,6 +8,7 @@ import { Spinner } from './ui/common';
 const TrainingPage = lazy(() => import('./pages/Training').then((m) => ({ default: m.TrainingPage })));
 const ReviewPage = lazy(() => import('./pages/Review').then((m) => ({ default: m.ReviewPage })));
 const OpeningsPage = lazy(() => import('./pages/Openings').then((m) => ({ default: m.OpeningsPage })));
+const AnalysisPage = lazy(() => import('./pages/Analysis').then((m) => ({ default: m.AnalysisPage })));
 const CoachPage = lazy(() => import('./pages/Coach').then((m) => ({ default: m.CoachPage })));
 const StatsPage = lazy(() => import('./pages/Stats').then((m) => ({ default: m.StatsPage })));
 const SettingsPage = lazy(() => import('./pages/Settings').then((m) => ({ default: m.SettingsPage })));
@@ -20,6 +21,7 @@ const NAV = [
   { id: 'play', label: 'Play', icon: 'M9 21h8l-1-3H10zM10 17h6l-1-6 2-2-1-4c-1.5-1.5-4.5-1.5-6 0l-1 4 2 2z' },
   { id: 'training', label: 'Training', icon: 'M12 3l2.5 6.5L21 10l-5 4.5L17.5 21 12 17.5 6.5 21 8 14.5 3 10l6.5-.5z' },
   { id: 'review', label: 'Game Analysis', icon: 'M4 19V5m0 14h16M8 15l3-4 3 2 5-6' },
+  { id: 'analysis', label: 'Analysis Board', icon: 'M4 4h16v16H4zM4 12h16M12 4v16M8 8h.01M16 16h.01' },
   { id: 'openings', label: 'Openings', icon: 'M4 5a2 2 0 012-2h5v18H6a2 2 0 01-2-2zM13 3h5a2 2 0 012 2v14a2 2 0 01-2 2h-5z' },
   { id: 'coach', label: 'AI Coach', icon: 'M4 5h16v11H9l-5 4z M8 9h8M8 12h5' },
   { id: 'stats', label: 'Statistics', icon: 'M5 20V10m7 10V4m7 16v-7' },
@@ -44,6 +46,7 @@ export function App() {
     case 'training': content = <TrainingPage route={rest} />; break;
     case 'review': content = <ReviewPage id={rest[0]} />; break;
     case 'openings': content = <OpeningsPage route={rest} />; break;
+    case 'analysis': content = <AnalysisPage key={rest[0] ?? 'free'} fenParam={rest[0]} />; break;
     case 'coach': content = <CoachPage key={rest[0] ?? 'free'} fenParam={rest[0]} />; break;
     case 'stats': content = <StatsPage />; break;
     case 'settings': content = <SettingsPage />; break;

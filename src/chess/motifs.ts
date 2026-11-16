@@ -2,7 +2,8 @@
 // Used to name the idea behind an engine move (fork, pin, skewer, ...), so
 // mistakes are classified by pattern and not only by evaluation.
 import { Chess, type Square, type PieceSymbol, type Color } from 'chess.js';
-import { VAL, PIECE_NAME, attackedPieces, ray, sliderDirs, tryMove, seeMove, see, isDefended, fileOf, rankOf, findKing, opp } from './util';
+import { VAL, PIECE_NAME, attackedPieces, ray, sliderDirs, tryMove, seeMove, isDefended, fileOf, rankOf, findKing, opp } from './util';
+import { moveGain, threatOn } from './tactics';
 
 export type MotifKind =
   | 'mate' | 'back_rank_mate' | 'fork' | 'pin' | 'skewer' | 'discovered'
@@ -39,26 +40,33 @@ export function detectMotifs(fen: string, uci: string): Motif[] {
     return out;
   }
 
+  // Does the move actually win material against the best defence? Tactical
+  // labels (fork, pin, skewer, discovery) are only given when it does: a
+  // "fork" of two defended pieces, or one where the forking piece is simply
+  // taken, is not a fork worth mentioning.
+  let gainMemo: number | undefined;
+  const gain = () => (gainMemo ??= moveGain(fen, uci));
+
   // Captures
   if (mv.captured) {
     const net = seeMove(fen, uci);
     const wasDefended = isDefended(before, mv.to, them);
-    if (!wasDefended && mv.captured !== 'p' || (!wasDefended && net >= 1)) {
+    if (!wasDefended && gain() >= 1) {
       out.push({ kind: 'capture_hanging', text: `it takes the undefended ${on(mv.captured, mv.to)} for free`, squares: [mv.to] });
-    } else if (net >= 1) {
-      out.push({ kind: 'winning_capture', text: `the capture on ${mv.to} wins material after the exchanges`, squares: [mv.to] });
+    } else if (wasDefended && net >= 1 && gain() >= 1) {
+      out.push({ kind: 'winning_capture', text: `the capture on ${mv.to} wins material even after they take back`, squares: [mv.to] });
     }
   }
   if (mv.promotion) out.push({ kind: 'promotion', text: `the pawn promotes to a ${nm(mv.promotion)}`, squares: [mv.to] });
 
-  // Is the moved piece simply lost on its new square? Then "fork"/"pin" claims are not real.
-  const loose = see(c.fen(), mv.to) >= VAL[moved.type] && moved.type !== 'p' && !c.isCheck();
+  // Is the moved piece simply lost on its new square (they win material by taking it)?
+  const loose = moved.type !== 'p' && threatOn(c.fen(), mv.to, them) > 0;
 
   // Fork: the moved piece attacks two or more worthwhile targets.
   if (!loose) {
     const targets = attackedPieces(c, mv.to).filter((t) => t.color === them).filter((t) =>
-      t.type === 'k' || VAL[t.type] > VAL[moved.type] || (!isDefended(c, t.sq, them) && t.type !== 'p'));
-    if (targets.length >= 2) {
+      t.type === 'k' || (t.type !== 'p' && threatOn(c.fen(), t.sq, me) > 0));
+    if (targets.length >= 2 && gain() >= 1) {
       const names = targets.map((t) => (t.type === 'k' ? 'the king' : `the ${on(t.type, t.sq)}`));
       out.push({
         kind: 'fork',
@@ -76,16 +84,16 @@ export function detectMotifs(fen: string, uci: string): Motif[] {
     if (a.color !== them || b.color !== them) continue;
     // Only count lines this move created (the same piece did not already hit them from its old square).
     if (a.type === 'k') {
-      if (b.type !== 'p' && (!isDefended(c, b.sq, them) || VAL[b.type] > VAL[moved.type])) {
+      if (b.type !== 'p' && (!isDefended(c, b.sq, them) || VAL[b.type] > VAL[moved.type]) && gain() >= 1) {
         out.push({ kind: 'skewer', text: `the check forces the king off the line and the ${on(b.type, b.sq)} behind it falls (a skewer)`, squares: [mv.to, a.sq, b.sq] });
       }
     } else if (b.type === 'k' && a.type !== 'p') {
       // An absolute pin always matters: the piece cannot legally move off the line.
-      const wins = VAL[a.type] > VAL[moved.type] || !isDefended(c, a.sq, them) || pawnCanHit(c, a.sq, me);
+      const wins = gain() >= 1;
       out.push({ kind: 'pin', text: `the ${on(a.type, a.sq)} is pinned to the king and cannot move away${wins ? ', and it can be won' : ''}`, squares: [mv.to, a.sq, b.sq] });
-    } else if (VAL[a.type] > VAL[b.type] && VAL[a.type] > VAL[moved.type] && b.type !== 'p' && (!isDefended(c, b.sq, them) || VAL[b.type] > VAL[moved.type])) {
+    } else if (VAL[a.type] > VAL[b.type] && VAL[a.type] > VAL[moved.type] && b.type !== 'p' && (!isDefended(c, b.sq, them) || VAL[b.type] > VAL[moved.type]) && gain() >= 1) {
       out.push({ kind: 'skewer', text: `the ${on(a.type, a.sq)} must move and the ${on(b.type, b.sq)} behind it is lost (a skewer)`, squares: [mv.to, a.sq, b.sq] });
-    } else if (VAL[b.type] > VAL[a.type] && a.type !== 'p' && VAL[b.type] > VAL[moved.type] && (VAL[a.type] > VAL[moved.type] || !isDefended(c, a.sq, them))) {
+    } else if (VAL[b.type] > VAL[a.type] && a.type !== 'p' && VAL[b.type] > VAL[moved.type] && (VAL[a.type] > VAL[moved.type] || !isDefended(c, a.sq, them)) && gain() >= 1) {
       out.push({ kind: 'pin', text: `the ${on(a.type, a.sq)} is pinned: if it moves, the ${on(b.type, b.sq)} behind it is lost`, squares: [mv.to, a.sq, b.sq] });
     }
   }
@@ -99,7 +107,7 @@ export function detectMotifs(fen: string, uci: string): Motif[] {
       if (!first || first.color !== them) continue;
       const blockedBefore = ray(before, p.square, df, dr)[0]?.sq === mv.from;
       if (!blockedBefore) continue;
-      if (first.type === 'k' || VAL[first.type] > VAL[p.type] || (!isDefended(c, first.sq, them) && first.type !== 'p')) {
+      if ((first.type === 'k' || (first.type !== 'p' && threatOn(c.fen(), first.sq, me) > 0)) && gain() >= 1) {
         out.push({
           kind: 'discovered',
           text: first.type === 'k'
@@ -117,9 +125,6 @@ export function detectMotifs(fen: string, uci: string): Motif[] {
   return out;
 }
 
-function pawnCanHit(c: Chess, s: Square, by: Color) {
-  return c.attackers(s, by).some((a) => c.get(a)?.type === 'p');
-}
 function piecesOf(c: Chess, color: Color) {
   const out: { square: Square; type: PieceSymbol }[] = [];
   for (const row of c.board()) for (const p of row) if (p && p.color === color) out.push(p);
