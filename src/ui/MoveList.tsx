@@ -6,9 +6,14 @@ export function MoveList({ sans, current, onSelect, classes, startPly = 0 }: {
   sans: string[]; current: number; onSelect?: (ply: number) => void; classes?: (MoveClass | undefined)[]; startPly?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Keep the current move visible by scrolling the list box only (never the page).
   useEffect(() => {
-    const a = ref.current?.querySelector('[data-active="true"]');
-    a?.scrollIntoView({ block: 'nearest' });
+    const box = ref.current;
+    const a = box?.querySelector<HTMLElement>('[data-active="true"]');
+    if (!box || !a) return;
+    const top = a.offsetTop, bottom = top + a.offsetHeight;
+    if (top < box.scrollTop) box.scrollTop = top - 4;
+    else if (bottom > box.scrollTop + box.clientHeight) box.scrollTop = bottom - box.clientHeight + 4;
   }, [current]);
   const rows: { no: number; w?: number; b?: number }[] = [];
   const blackFirst = startPly % 2 === 1;
@@ -32,7 +37,7 @@ export function MoveList({ sans, current, onSelect, classes, startPly = 0 }: {
     );
   };
   return (
-    <div ref={ref} className="scroll-thin h-full overflow-y-auto text-sm">
+    <div ref={ref} className="relative scroll-thin h-full overflow-y-auto text-sm">
       {rows.length === 0 && <div className="text-ink-400 text-sm p-2">No moves yet.</div>}
       <div className="grid grid-cols-[2.4rem_1fr_1fr] gap-y-0.5">
         {rows.map((r) => (
