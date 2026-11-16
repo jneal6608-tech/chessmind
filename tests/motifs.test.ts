@@ -25,7 +25,10 @@ describe('tactical motif detection', () => {
     expect(kinds('8/rk6/8/8/8/8/8/4K2R w - - 0 1', 'h1h7')).not.toContain('skewer');
   });
   it('discovered attack', () => {
-    expect(kinds('3qk3/8/8/8/8/3N4/8/3RK3 w - - 0 1', 'd3f4')).toContain('discovered');
+    // Nf7+ forks king and queen and uncovers the rook on the queen as well
+    expect(kinds('3q3k/8/3N4/8/8/8/8/3RK3 w - - 0 1', 'd6f7')).toContain('discovered');
+    // Uncovering an attack on a queen that can simply step away wins nothing
+    expect(kinds('3qk3/8/8/8/8/3N4/8/3RK3 w - - 0 1', 'd3f4')).not.toContain('discovered');
   });
   it('capturing a hanging piece', () => {
     expect(kinds('4k3/8/8/3r4/8/8/8/3RK3 w - - 0 1', 'd1d5')).toContain('capture_hanging');
@@ -43,5 +46,25 @@ describe('back-rank mate recognition', () => {
   });
   it("scholar's mate is not a back-rank mate", () => {
     expect(isBackRankMateLine('r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4', ['h5f7'])).toBe(false);
+  });
+});
+
+describe('tactics are only claimed when they work', () => {
+  it('taking a knight that a pawn defends is a trade, not a win', () => {
+    // Bxf6: the knight on f6 is defended by the g7 pawn
+    const k = kinds('r1bqk2r/pppp1ppp/2n2n2/4p1B1/4P3/2N5/PPPP1PPP/R2QKBNR w KQkq - 0 1', 'g5f6');
+    expect(k).not.toContain('capture_hanging');
+    expect(k).not.toContain('winning_capture');
+  });
+  it('a knight "fork" that a pawn can simply capture is not a fork', () => {
+    // Nc7+ hits king and rook, but the b6... here the d8 queen takes the knight
+    expect(kinds('r2qk3/8/8/1N6/8/8/8/4K3 w - - 0 1', 'b5c7')).not.toContain('fork');
+  });
+  it('a fork of two defended pieces of equal value is not a fork', () => {
+    // Knight on d5 attacks the bishops on c7 and e7, both defended
+    expect(kinds('3qk3/2b1b3/8/8/8/4N3/8/4K3 w - - 0 1', 'e3d5')).not.toContain('fork');
+  });
+  it('a knight fork that still wins after the best defence is a fork', () => {
+    expect(kinds('r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1', 'b5c7')).toContain('fork');
   });
 });

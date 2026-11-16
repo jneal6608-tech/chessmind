@@ -28,6 +28,9 @@
   --color-mistake: #e8914a;
   --color-blunder: #e05a4f;
   --color-miss: #c77dd9;
+  --color-great: #6aa6e8;
+  --color-brilliant: #3cc8c8;
+  --color-book: #b59a73;
 }
 
 html, body, #root { height: 100%; }
@@ -98,6 +101,8 @@ body {
 .cls-inaccuracy { color: var(--color-inacc); } .cls-mistake { color: var(--color-mistake); } .cls-blunder { color: var(--color-blunder); } .cls-miss { color: var(--color-miss); }
 .bg-cls-inaccuracy { background: var(--color-inacc); } .bg-cls-mistake { background: var(--color-mistake); } .bg-cls-blunder { background: var(--color-blunder); } .bg-cls-miss { background: var(--color-miss); }
 .bg-cls-best { background: var(--color-best); } .bg-cls-excellent { background: var(--color-good); }
+.cls-great { color: var(--color-great); } .cls-brilliant { color: var(--color-brilliant); } .cls-book { color: var(--color-book); } .cls-forced { color: var(--color-ink-300); }
+.bg-cls-great { background: var(--color-great); } .bg-cls-brilliant { background: var(--color-brilliant); } .bg-cls-book { background: var(--color-book); } .bg-cls-good { background: var(--color-ink-300); } .bg-cls-forced { background: var(--color-ink-500); }
 
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .fade-in { animation: fadein .25s ease-out both; }

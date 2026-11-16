@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { MoveClass } from '../analysis/types';
-
-const GLYPH: Partial<Record<MoveClass, string>> = { inaccuracy: '?!', mistake: '?', blunder: '??', miss: '✕', best: '★' };
+import { CLASS_GLYPH, CLASS_LABEL } from './classes';
 
 export function MoveList({ sans, current, onSelect, classes, startPly = 0 }: {
   sans: string[]; current: number; onSelect?: (ply: number) => void; classes?: (MoveClass | undefined)[]; startPly?: number;
@@ -23,10 +22,12 @@ export function MoveList({ sans, current, onSelect, classes, startPly = 0 }: {
     if (i === undefined) return <span className="px-2 py-1 text-ink-500">…</span>;
     const cls = classes?.[i];
     const active = i === current;
+    const quiet = cls === 'good' || cls === 'forced';
     return (
-      <button data-active={active} onClick={() => onSelect?.(i)}
-        className={`text-left px-2 py-1 rounded-md font-medium tabular-nums transition-colors ${active ? 'bg-brass-500/25 text-brass-300' : 'hover:bg-ink-700'} ${cls ? `cls-${cls}` : ''}`}>
-        {sans[i]}{cls && GLYPH[cls] ? <span className="ml-0.5 text-[11px] font-bold">{GLYPH[cls]}</span> : null}
+      <button data-active={active} onClick={() => onSelect?.(i)} title={cls ? CLASS_LABEL[cls] : undefined}
+        className={`flex items-center justify-between gap-1 text-left px-2 py-1 rounded-md font-medium tabular-nums transition-colors ${active ? 'bg-brass-500/25 text-brass-300' : 'hover:bg-ink-700'} ${cls && !quiet && !active ? `cls-${cls}` : ''}`}>
+        <span>{sans[i]}</span>
+        {cls ? <span className={`text-[10px] font-bold cls-${cls} ${quiet ? 'opacity-50' : ''}`}>{CLASS_GLYPH[cls]}</span> : null}
       </button>
     );
   };

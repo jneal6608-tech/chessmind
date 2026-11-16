@@ -4,12 +4,20 @@
 import { Chess, type Color, type Square, type PieceSymbol } from 'chess.js';
 import type { UciEngine } from '../engine/uci';
 import { scoreOf, winPct } from '../engine/uci';
-import { VAL, PIECE_NAME, tryMove, attackedPieces, isDefended, material, findKing, parseUci, opp } from '../chess/util';
+import { VAL, PIECE_NAME, tryMove, attackedPieces, isDefended, material, findKing, parseUci, opp, seeMove } from '../chess/util';
+import { threatOn } from '../chess/tactics';
 import { detectMotifs } from '../chess/motifs';
 import type { CoachLevel } from './explain';
 
 const whose = (c: Color, me: Color) => (c === me ? 'your' : 'their');
 const ref = (t: PieceSymbol, c: Color, sq: string, me: Color) => `${whose(c, me)} ${PIECE_NAME[t]} on ${sq}`;
+
+/** Who defends `sq` for `color`, in words: "the pawn on e6 and the queen on d8". */
+function defendersText(c: Chess, sq: Square, color: Color, me: Color): string {
+  const ds = c.attackers(sq, color).map((s) => ({ s, p: c.get(s)! })).sort((a, b) => VAL[a.p.type] - VAL[b.p.type]);
+  const words = ds.slice(0, 2).map((d) => `${whose(color, me)} ${PIECE_NAME[d.p.type]} on ${d.s}`);
+  return words.join(' and ');
+}
 
 /** One move in plain words, from `me`'s point of view. */
 export function describeMove(fen: string, uci: string, me: Color): string {
@@ -19,37 +27,63 @@ export function describeMove(fen: string, uci: string, me: Color): string {
   if (!mv) return uci;
   const who = mv.color === me ? 'You' : 'They';
   const mine = mv.color === me;
+  const them = opp(mv.color);
   const piece = PIECE_NAME[mv.piece];
   let s: string;
   if (mv.san.startsWith('O-O')) s = `${who} castle ${mv.san === 'O-O' ? 'kingside' : 'queenside'}, tucking the king away and bringing a rook toward the centre`;
-  else if (mv.captured) s = `${who} take ${ref(mv.captured, opp(mv.color), mv.to, me)} with ${mine ? 'your' : 'their'} ${piece}`;
+  else if (mv.captured) s = `${who} take ${ref(mv.captured, them, mv.to, me)} with ${mine ? 'your' : 'their'} ${piece}`;
   else if (mv.promotion) s = `${who} push the pawn to ${mv.to} and promote it to a ${PIECE_NAME[mv.promotion]}`;
   else s = `${who} move ${mine ? 'your' : 'their'} ${piece} from ${mv.from} to ${mv.to}`;
   if (mv.promotion && mv.captured) s += `, promoting to a ${PIECE_NAME[mv.promotion]}`;
   const extras: string[] = [];
   if (c.isCheckmate()) return `${s}. Checkmate!`;
   if (c.isCheck()) extras.push('giving check');
-  // New targets of the moved piece (valuable or undefended enemy pieces)
+  // Captures: was the piece defended? Then it is a trade, not a free piece.
+  let captureNote = '';
+  if (mv.captured && !c.isCheckmate()) {
+    const defended = before.attackers(mv.to, them).length > 0;
+    const net = seeMove(fen, uci);
+    const capV = VAL[mv.captured], pieceV = VAL[mv.piece];
+    if (!defended) captureNote = mv.captured === 'p' ? 'The pawn was not defended, so it is a free pawn.' : `The ${PIECE_NAME[mv.captured]} was not defended, so it is free.`;
+    else {
+      const dtext = defendersText(c, mv.to, them, me);
+      const back = mine ? 'they can take back' : 'you can take back';
+      if (!dtext) captureNote = '';
+      else if (net < 0) captureNote = `But it is defended by ${dtext}, so ${back} and ${mine ? 'you lose' : 'they lose'} material (${PIECE_NAME[mv.piece]} for ${PIECE_NAME[mv.captured] === 'pawn' ? 'a pawn' : PIECE_NAME[mv.captured]}).`;
+      else if (net === 0 || capV === pieceV) captureNote = `It is defended by ${dtext}, so ${back}: this is a trade, not a free piece.`;
+      else if (capV > pieceV) captureNote = `It is defended by ${dtext}, but the ${PIECE_NAME[mv.captured]} is worth more than the ${PIECE_NAME[mv.piece]}, so ${mine ? 'you' : 'they'} still come out ahead.`;
+      else captureNote = `It is defended by ${dtext}, but ${mine ? 'you' : 'they'} still win material after the exchanges.`;
+    }
+  }
+  // New targets of the moved piece: only real threats (they would win material
+  // by taking, even counting the defenders), not pieces that are protected.
+  const fenNow = c.fen();
+  const movedLoose = mv.piece !== 'k' && mv.piece !== 'p' && !c.isCheck() && threatOn(fenNow, mv.to, them) > 0;
   const prev = new Set(attackedPieces(before, mv.from).map((p) => p.sq));
-  const targets = attackedPieces(c, mv.to)
+  const targets = movedLoose ? [] : attackedPieces(c, mv.to)
     .filter((p) => p.color !== mv.color && p.type !== 'k' && !prev.has(p.sq))
-    .filter((p) => VAL[p.type] > VAL[mv.piece] || !isDefended(c, p.sq, p.color));
-  if (targets.length) extras.push(`attacking ${targets.map((p) => ref(p.type, p.color, p.sq, me)).join(' and ')}`);
-  else {
-    // Piling up: the moved piece joins an attack on something that now has more attackers than defenders.
+    .filter((p) => threatOn(fenNow, p.sq, mv.color) > 0);
+  if (targets.length) extras.push(`attacking ${targets.map((p) => ref(p.type, p.color, p.sq, me)).join(' and ')}${targets.every((p) => !isDefended(c, p.sq, p.color)) ? ' (not defended)' : ''}`);
+  else if (!movedLoose) {
+    // Piling up: the moved piece joins an attack that now wins the target.
     const pile = attackedPieces(c, mv.to).filter((p) => p.color !== mv.color && p.type !== 'k' && !prev.has(p.sq))
       .map((p) => ({ p, a: c.attackers(p.sq as Square, mv.color).length, d: c.attackers(p.sq as Square, p.color).length }))
-      .find((x) => x.a >= 2 && x.a > x.d);
+      .find((x) => x.a >= 2 && x.a > x.d && threatOn(fenNow, x.p.sq, mv.color) > 0);
     if (pile) extras.push(`ganging up on ${ref(pile.p.type, pile.p.color, pile.p.sq, me)} (attacked ${pile.a} times, defended ${pile.d === 0 ? 'not at all' : pile.d === 1 ? 'once' : pile.d + ' times'})`);
   }
   // Development
   const home = mv.color === 'w' ? '1' : '8';
   if ((mv.piece === 'n' || mv.piece === 'b') && mv.from[1] === home && !mv.captured) extras.push('getting a piece into the game');
   if (mv.piece === 'p' && !mv.captured && 'de'.includes(mv.to[0]) && ['4', '5'].includes(mv.to[1])) extras.push('grabbing space in the centre');
-  // The best pattern, if any (fork, pin, ...)
+  // The best pattern, if any (fork, pin, ...): detectMotifs only reports ones that really win something.
   const motif = detectMotifs(fen, uci).find((m) => ['fork', 'pin', 'skewer', 'discovered'].includes(m.kind));
   let out = s + (extras.length ? `, ${extras.join(', ')}` : '') + '.';
+  if (captureNote) out += ` ${captureNote}`;
   if (motif) out += ` ${cap(motif.text)}.`;
+  else if (movedLoose && !mv.captured) {
+    const att = c.attackers(mv.to, them).map((x) => ({ x, p: c.get(x)! })).sort((a, b) => VAL[a.p.type] - VAL[b.p.type])[0];
+    if (att) out += ` Careful: the ${PIECE_NAME[mv.piece]} on ${mv.to} can be taken by ${whose(them, me)} ${PIECE_NAME[att.p.type]} on ${att.x}${isDefended(c, mv.to, mv.color) ? ' and the recapture does not make up for it' : ' and nothing defends it'}.`;
+  }
   return out;
 }
 
@@ -75,7 +109,8 @@ export function settle(fen: string, ucis: string[], maxPly = 8): { plies: number
   const start = bal();
   let plies = 0;
   const lost: PieceSymbol[] = [], won: PieceSymbol[] = [];
-  for (let i = 0; i < Math.min(maxPly, ucis.length); i++) {
+  // Past maxPly, keep going only while the captures continue (never stop between a capture and its recapture).
+  for (let i = 0; i < Math.min(maxPly + 6, ucis.length); i++) {
     const m = tryMove(c, ucis[i]);
     if (!m) break;
     plies = i + 1;
@@ -85,6 +120,7 @@ export function settle(fen: string, ucis: string[], maxPly = 8): { plies: number
     const nextCaptures = next ? !!new Chess(c.fen()).moves({ verbose: true }).find((x) => x.lan === next)?.captured : false;
     if (c.isCheckmate()) break;
     if (i >= 1 && !m.captured && !nextCaptures && !c.isCheck()) break;
+    if (i >= maxPly - 1 && !nextCaptures) break;
   }
   return { plies, delta: bal() - start, lost, won };
 }

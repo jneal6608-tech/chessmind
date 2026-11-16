@@ -16,11 +16,15 @@ import { splitPgn, parseGame, fetchLichess, fetchChessCom, exportPgn, download, 
 import { explainMove, levelFor, summaryLine } from '../coach/explain';
 import { storyFor, describeMove, type Step } from '../coach/teach';
 import { IdeaLab } from '../ui/IdeaLab';
+import { AnalysisBoard } from '../ui/AnalysisBoard';
+import { CLASS_LABEL, CLASS_MEANING, CLASS_ORDER } from '../ui/classes';
+import { compareMoves, alternativeCaptures, type Comparison } from '../coach/compare';
 import { WEAKNESS, THEME_LABEL } from '../training/themes';
 import { go } from '../services/router';
 import { tryMove, uid, formatLine, START_FEN } from '../chess/util';
 import type { GameRecord, MoveAnalysis } from '../analysis/types';
 import { pick } from '../training/select';
+import { formatScore } from '../engine/uci';
 
 export function ReviewPage({ id }: { id?: string }) {
   return id ? <GameReview id={id} /> : <GameList />;
@@ -164,6 +168,7 @@ function GameReview({ id }: { id: string }) {
   const [flip, setFlip] = useState<boolean | null>(null);
   const [del, setDel] = useState(false);
   const [lab, setLab] = useState(false);
+  const [explore, setExplore] = useState<{ fen: string; gameMove?: string; initialLine?: string[]; title?: string } | null>(null);
   useEffect(() => { if (game && !game.analysis) analyzeSoon(game.id); }, [game?.id, !!game?.analysis]);
 
   const fens = useMemo(() => {
@@ -176,7 +181,7 @@ function GameReview({ id }: { id: string }) {
 
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
-      if (!game || (e.target as HTMLElement).tagName === 'INPUT') return;
+      if (!game || (e.target as HTMLElement).tagName === 'INPUT' || document.querySelector('[data-explorer]')) return;
       if (e.key === 'ArrowLeft') { setFocus(null); setPly((p) => Math.max(-1, p - 1)); }
       if (e.key === 'ArrowRight') { setFocus(null); setPly((p) => Math.min(game.moves.length - 1, p + 1)); }
     };
@@ -239,6 +244,7 @@ function GameReview({ id }: { id: string }) {
           <div className="text-xs text-ink-400">{fmtDate(game.date)} · {game.opening ? `${game.opening.eco} ${game.opening.name}` : 'Opening not identified'} · {game.termination || game.result}</div>
         </div>
         <div className="flex gap-2">
+          <button className="btn btn-primary btn-sm" onClick={() => setExplore({ fen: boardFen, gameMove: !focusMove ? game.moves[ply + 1] : undefined })}>Analyse from here</button>
           <button className="btn btn-sm" onClick={() => go(`coach/${encodeURIComponent(boardFen)}`)}>Ask the coach</button>
           <button className="btn btn-sm" onClick={() => download(`game-${game.id}.pgn`, game.pgn)}>PGN</button>
           <button className="btn btn-sm" onClick={() => setDel(true)}>Delete</button>
@@ -292,6 +298,8 @@ function GameReview({ id }: { id: string }) {
                   <p className="font-semibold text-ink-100"><Explained text={`The better move was ${focusMove.bestSan}.${ex.bestIdea ? ` ${ex.bestIdea}` : ''}`} /></p>
                   <StoryList steps={bestStory.steps} at={lineStep} onPick={setLineStep} tone="good" />
                   <p className="mt-2">That way <b className="text-good">{bestStory.result}</b>.</p>
+                  {(() => { const c = storedComparison(focusMove); return c && !c.equal ? <CompareBox c={c} /> : null; })()}
+                  <button className="btn btn-sm mt-2" onClick={() => setExplore({ fen: focusMove.fenBefore, gameMove: focusMove.uci, title: `Move ${Math.floor(focusMove.ply / 2) + 1}: explore it yourself` })}>Explore both lines on the board</button>
                 </>}
                 {step === 4 && <><p className="font-semibold text-ink-100"><Explained text={ex.concept} /></p><p className="mt-2 text-ink-300">How to spot it next time: <Explained text={ex.recognize} /></p></>}
               </div>
@@ -356,7 +364,7 @@ function GameReview({ id }: { id: string }) {
           )}
           <Card className="!p-2">
             <div className="h-[200px]">
-              <MoveList sans={game.sans} current={ply} classes={a?.moves.map((m) => (m.cls === 'good' || m.cls === 'excellent' || m.cls === 'book' || m.cls === 'forced' ? undefined : m.cls))} onSelect={(i) => { setFocus(null); setPly(i); }} />
+              <MoveList sans={game.sans} current={ply} classes={a?.moves.map((m) => m.cls)} onSelect={(i) => { setFocus(null); setPly(i); }} />
             </div>
             <div className="mt-2 flex justify-between gap-1 border-t border-ink-700 pt-2">
               <button className="btn btn-ghost btn-sm" onClick={() => { setFocus(null); setPly(-1); }} aria-label="Start">⏮</button>
@@ -366,17 +374,10 @@ function GameReview({ id }: { id: string }) {
               <button className="btn btn-ghost btn-sm" onClick={() => setFlip(orientation === 'white')} aria-label="Flip">⇅</button>
             </div>
           </Card>
-          {ma && !focusMove && (
-            <Card>
-              <div className="text-sm">
-                <span className={`font-semibold cls-${ma.cls}`}>{Math.floor(ma.ply / 2) + 1}{ma.color === 'w' ? '.' : '...'}{ma.san}</span>
-                <span className="text-ink-300"> · {ma.cls}{ma.cls !== 'best' && ma.cls !== 'book' && ma.cls !== 'forced' ? ` · best was ${ma.bestSan}` : ''}</span>
-              </div>
-              {ma.bestLine.length > 0 && ma.cls !== 'best' && <div className="mt-1 text-xs text-ink-400 font-mono">{formatLine(ma.fenBefore, ma.bestLine.slice(0, 6))}</div>}
-              {ma.tags[0] && <p className="mt-2 text-xs text-ink-300"><Explained text={ma.tags[0].why} /></p>}
-              {ma.color === game.userColor && ['mistake', 'blunder', 'miss', 'inaccuracy'].includes(ma.cls) && <button className="btn btn-sm mt-2" onClick={() => { setFocus(ma.ply); setStep(0); }}>Study this move</button>}
-            </Card>
-          )}
+          {ma && !focusMove && <MoveCard m={ma} mine={ma.color === game.userColor}
+            onStudy={() => { setFocus(ma.ply); setStep(0); }}
+            onExplore={(line) => setExplore({ fen: ma.fenBefore, gameMove: ma.uci, initialLine: line, title: `Move ${Math.floor(ma.ply / 2) + 1}${ma.color === 'w' ? '.' : '...'}${ma.san}: try it yourself` })} />}
+          {a && <ClassTable a={a} userColor={game.userColor} onPick={(p) => { setFocus(null); setPly(p); }} />}
           {a && <p className="px-2 text-[11px] text-ink-500">{summaryLine('w', a.accuracy.w, a.counts.w)} {summaryLine('b', a.accuracy.b, a.counts.b)}</p>}
         </div>
       </div>
@@ -386,6 +387,12 @@ function GameReview({ id }: { id: string }) {
             intro={`Move ${Math.floor(focusMove.ply / 2) + 1}: in the game you played ${focusMove.san}. Try any move here, and I'll show you what happens and why.`} /></div>
         </div>
       )}
+      {explore && (
+        <div data-explorer className="fixed inset-0 z-40 overflow-y-auto bg-ink-950/95 backdrop-blur p-2 sm:p-6">
+          <div className="mx-auto max-w-[1320px]"><AnalysisBoard fen={explore.fen} gameMove={explore.gameMove} initialLine={explore.initialLine} orientation={orientation} theme={data.settings.boardTheme} coords={data.settings.showCoords}
+            title={explore.title ?? 'Analyse from here'} onClose={() => setExplore(null)} /></div>
+        </div>
+      )}
       <Modal open={del} onClose={() => setDel(false)} title="Delete this game?">
         <p className="text-sm text-ink-300">The game and its analysis are removed from your history and weakness profile.</p>
         <div className="mt-4 flex justify-end gap-2"><button className="btn" onClick={() => setDel(false)}>Cancel</button><button className="btn btn-primary" onClick={async () => { await G.del(game.id); go('review'); }}>Delete</button></div>
@@ -393,6 +400,82 @@ function GameReview({ id }: { id: string }) {
     </div>
   );
 }
+/** "Why the best move was better than yours", from the stored review (no engine call). */
+function storedComparison(m: MoveAnalysis): Comparison | null {
+  if (!m.bestUci || m.bestUci === m.uci) return null;
+  const sign = m.color === 'w' ? 1 : -1;
+  const best = { uci: m.bestUci, san: m.bestSan, cp: m.bestCp ?? m.evalBefore * sign, pv: m.bestLineUci.length ? m.bestLineUci : [m.bestUci] };
+  const mine = { uci: m.uci, san: m.san, cp: m.evalAfter * sign, pv: [m.uci, ...m.replyLineUci] };
+  try { return compareMoves(m.fenBefore, best, mine); } catch { return null; }
+}
+
+function CompareBox({ c }: { c: Comparison }) {
+  return (
+    <div className="mt-2 rounded-lg bg-ink-900 p-2.5 text-sm">
+      <div className="font-semibold text-ink-100"><Explained text={c.summary} /></div>
+      <ul className="mt-1 list-disc pl-5 space-y-0.5 text-ink-300">{c.reasons.map((r, i) => <li key={i}><Explained text={r} /></li>)}</ul>
+    </div>
+  );
+}
+
+/** Details of one move: its label, what it does, and why the best move was better. */
+function MoveCard({ m, mine, onStudy, onExplore }: { m: MoveAnalysis; mine: boolean; onStudy: () => void; onExplore: (line?: string[]) => void }) {
+  const cmp = useMemo(() => storedComparison(m), [m.fenBefore, m.uci]);
+  const bad = ['inaccuracy', 'mistake', 'blunder', 'miss'].includes(m.cls);
+  const altCaps = useMemo(() => alternativeCaptures(m.fenBefore).find((x) => x.ucis.includes(m.uci)), [m.fenBefore, m.uci]);
+  const others = altCaps?.sans.filter((s) => s !== m.san) ?? [];
+  return (
+    <Card>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm"><span className="font-semibold">{Math.floor(m.ply / 2) + 1}{m.color === 'w' ? '.' : '...'}{m.san}</span>
+          <span className={`ml-2 font-bold cls-${m.cls}`}>{CLASS_LABEL[m.cls]}</span>
+          <span className="ml-1 text-xs text-ink-400">({mine ? 'you' : 'opponent'})</span></span>
+        <span className="text-[11px] text-ink-400 tabular-nums">{m.cls !== 'book' && m.cls !== 'forced' ? `-${m.winLoss.toFixed(0)}% win chance` : ''}</span>
+      </div>
+      <p className="mt-0.5 text-[11px] text-ink-400">{CLASS_MEANING[m.cls]}</p>
+      <p className="mt-2 text-sm text-ink-200"><Explained text={describeMove(m.fenBefore, m.uci, m.color)} /></p>
+      {m.tags[0] && bad && <p className="mt-1 text-xs text-ink-300"><Explained text={m.tags[0].why} /></p>}
+      {cmp && m.cls !== 'best' && m.cls !== 'book' && m.cls !== 'forced' && !cmp.equal && <CompareBox c={cmp} />}
+      {cmp && cmp.equal && m.cls !== 'best' && <p className="mt-2 text-xs text-ink-300">Stockfish slightly preferred <b>{m.bestSan}</b>, but the difference is tiny.</p>}
+      {(m.cls === 'best' || m.cls === 'great' || m.cls === 'brilliant') && m.secondSan && m.secondSan !== m.san && m.bestCp !== undefined && m.secondCp !== undefined && (
+        <p className="mt-2 text-xs text-ink-300">Next best was <b>{m.secondSan}</b> ({formatScore((m.color === 'w' ? 1 : -1) * m.secondCp)} instead of {formatScore((m.color === 'w' ? 1 : -1) * m.bestCp)}).</p>
+      )}
+      {others.length > 0 && <p className="mt-2 text-xs text-ink-300">You could also take on {altCaps!.square} with <b>{others.join(' or ')}</b>. Open the analysis board to see which capture is better and why.</p>}
+      {m.bestLine.length > 0 && m.cls !== 'best' && m.cls !== 'book' && <div className="mt-2 text-xs text-ink-400"><span className="text-good">Best line:</span> <span className="font-mono">{formatLine(m.fenBefore, m.bestLine.slice(0, 6))}</span></div>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button className="btn btn-sm" onClick={() => onExplore()}>Try your own moves here</button>
+        {m.bestUci !== m.uci && <button className="btn btn-sm" onClick={() => onExplore([m.bestUci])}>Explore {m.bestSan}</button>}
+        {mine && bad && <button className="btn btn-sm" onClick={onStudy}>Study this move</button>}
+      </div>
+    </Card>
+  );
+}
+
+/** How many moves of each kind, like the summary after a game. */
+function ClassTable({ a, userColor, onPick }: { a: NonNullable<GameRecord['analysis']>; userColor: 'w' | 'b'; onPick: (ply: number) => void }) {
+  const count = (c: 'w' | 'b', k: string) => a.moves.filter((m) => m.color === c && m.cls === k);
+  const opp = userColor === 'w' ? 'b' : 'w';
+  return (
+    <Card title="Every move rated">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1 text-sm">
+        <span /><span className="label !text-[10px] text-right">You</span><span className="label !text-[10px] text-right">Opponent</span>
+        {CLASS_ORDER.map((k) => {
+          const mine = count(userColor, k), theirs = count(opp, k);
+          if (!mine.length && !theirs.length) return null;
+          return (
+            <div key={k} className="contents">
+              <span className={`cls-${k} font-semibold`} title={CLASS_MEANING[k]}>{CLASS_LABEL[k]}</span>
+              <button className="text-right tabular-nums hover:underline disabled:no-underline" disabled={!mine.length} onClick={() => onPick(mine[0].ply)}>{mine.length}</button>
+              <button className="text-right tabular-nums text-ink-300 hover:underline disabled:no-underline" disabled={!theirs.length} onClick={() => onPick(theirs[0].ply)}>{theirs.length}</button>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-ink-500">Click a move in the list to see why it got its label. Click a number to jump to the first such move.</p>
+    </Card>
+  );
+}
+
 function StoryList({ steps, at, onPick, tone }: { steps: Step[]; at: number; onPick: (n: number) => void; tone: 'good' | 'bad' }) {
   return (
     <ol className="mt-2 space-y-1">

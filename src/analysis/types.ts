@@ -2,7 +2,7 @@ import type { Color } from 'chess.js';
 import type { Phase } from '../chess/util';
 import type { Motif } from '../chess/motifs';
 
-export type MoveClass = 'book' | 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder' | 'miss' | 'forced';
+export type MoveClass = 'book' | 'brilliant' | 'great' | 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder' | 'miss' | 'forced';
 
 export interface Tag {
   /** Weakness key from training/themes.ts */
@@ -28,6 +28,12 @@ export interface MoveAnalysis {
   /** Engine main line from fenBefore, SAN. */
   bestLine: string[];
   bestLineUci: string[];
+  /** Engine's second choice (when there was one): its first move and score, mover's view. */
+  secondUci?: string;
+  secondSan?: string;
+  secondCp?: number;
+  /** Engine score of the best move, mover's view. */
+  bestCp?: number;
   /** Opponent's best reply line after the played move, SAN. */
   replyLine: string[];
   replyLineUci: string[];

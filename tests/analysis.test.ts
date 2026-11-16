@@ -117,7 +117,19 @@ describe('teaching in plain words', () => {
   it('describes moves with piece names, captures, attacks and piling up', () => {
     expect(describeMove('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3', 'f1c4', 'w')).toMatch(/You move your bishop from f1 to c4/);
     expect(describeMove('4k3/8/8/3r4/8/8/8/3RK3 w - - 0 1', 'd1d5', 'w')).toMatch(/You take their rook on d5 with your rook/);
-    expect(describeMove('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4', 'f3g5', 'w')).toMatch(/ganging up on their pawn on f7/);
+    expect(describeMove('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4', 'f3g5', 'w')).toMatch(/attacking their pawn on f7/);
+  });
+  it('captures say whether the piece was defended', () => {
+    // Bxf6: the knight is defended by the g7 pawn -> a trade
+    expect(describeMove('r1bqk2r/pppp1ppp/2n2n2/4p1B1/4P3/2N5/PPPP1PPP/R2QKBNR w KQkq - 0 1', 'g5f6', 'w')).toMatch(/defended by their pawn on g7.*trade/);
+    // Rxd5 of an undefended rook: free
+    expect(describeMove('4k3/8/8/3r4/8/8/8/3RK3 w - - 0 1', 'd1d5', 'w')).toMatch(/not defended, so it is free/);
+    // Qxd5 of a pawn defended by a pawn: loses the queen
+    expect(describeMove('4k3/8/4p3/3p4/8/8/8/3QK3 w - - 0 1', 'd1d5', 'w')).toMatch(/you lose material/);
+  });
+  it('does not call a protected pawn a target', () => {
+    // Bb5 "attacks" nothing worth mentioning: the c6 knight is defended by two pawns
+    expect(describeMove('r1bqkbnr/1ppp1ppp/p1n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 4', 'f1b5', 'w')).not.toMatch(/attacking/);
   });
   it('material summaries settle after the exchanges', () => {
     expect(settle('4k3/8/8/3r4/8/8/8/3RK3 w - - 0 1', ['d1d5', 'e8e7']).delta).toBe(5);

@@ -1,6 +1,7 @@
 // Engine review of a finished game: evaluation of every position, move
 // classification, accuracy, critical moments, phase performance and lessons.
-import { Chess, type Color } from 'chess.js';
+import { Chess, type Color, type Square } from 'chess.js';
+import { moveGain } from '../chess/tactics';
 import type { UciEngine, EvalLine } from '../engine/uci';
 import { scoreOf, winPct } from '../engine/uci';
 import { phaseOf, pvToSan, tryMove, nullMoveFen, opp, START_FEN } from '../chess/util';
@@ -10,7 +11,7 @@ import { identifyOpening, isBookPosition } from '../openings/identify';
 import { WEAKNESS } from '../training/themes';
 import type { GameAnalysis, GameRecord, MoveAnalysis, MoveClass, PhaseStats, Counts } from './types';
 
-export const ANALYSIS_VERSION = 4;
+export const ANALYSIS_VERSION = 5;
 
 /** Lichess move accuracy from win-chance loss (percentage points). */
 export function moveAccuracy(winLoss: number): number {
@@ -25,9 +26,11 @@ export function gameAccuracy(acc: number[]): number {
   return Math.round(((mean + harm) / 2) * 10) / 10;
 }
 
-export function classOf(winLoss: number, ctx: { book: boolean; forced: boolean; bestPlayed: boolean; missed: boolean; nearBest: boolean }): MoveClass {
+export function classOf(winLoss: number, ctx: { book: boolean; forced: boolean; bestPlayed: boolean; missed: boolean; nearBest: boolean; sacrifice?: boolean; onlyMove?: boolean }): MoveClass {
   if (ctx.forced) return 'forced';
   if (ctx.book && winLoss < 5) return 'book';
+  if ((ctx.bestPlayed || ctx.nearBest) && ctx.sacrifice) return 'brilliant';
+  if (ctx.bestPlayed && ctx.onlyMove) return 'great';
   if (ctx.bestPlayed) return 'best';
   if (ctx.missed && winLoss >= 10) return 'miss';
   if (winLoss >= 20) return 'blunder';
@@ -84,13 +87,26 @@ export async function reviewGame(
     const prevMover = i > 0 ? winPct(white(i - 1) * sign) : 50; // our chances before their last move
     const missed = wBefore >= 70 && prevMover < 60 && wAfter < wBefore - 10;
     const book = i < 24 && isBookPosition(fens[i + 1]);
-    const cls = classOf(winLoss, { book, forced: legal === 1, bestPlayed, missed, nearBest });
+    // Great: the only move that keeps the position (the runner-up is much worse),
+    // not a routine recapture and not in a position that is already won or lost.
+    const prevTo = i > 0 ? g.moves[i - 1].slice(2, 4) : '';
+    const recapture = i > 0 && played.slice(2, 4) === prevTo && !!new Chess(fens[i - 1]).get(prevTo as Square);
+    const gap = second ? winPct(scoreOf(best)) - winPct(scoreOf(second)) : 0;
+    const onlyMove = bestPlayed && !!second && gap >= 15 && !recapture && wBefore > 15 && wBefore < 90 && legal > 1;
+    // Brilliant: a good move that gives up material (it really loses material
+    // in the short run) while the position stays good.
+    // Compared with the runner-up, so a piece that was lost anyway is not a "sacrifice".
+    const sacGain = (bestPlayed || winLoss < 2) && wAfter >= 45 && wBefore < 97 && legal > 1 ? moveGain(fen, played) : 0;
+    const altUci = bestPlayed ? second?.pv[0] : bestUci;
+    const sacrifice = sacGain <= -2 && (!altUci || moveGain(fen, altUci) > sacGain + 1);
+    const cls = classOf(winLoss, { book, forced: legal === 1, bestPlayed, missed, nearBest, sacrifice, onlyMove });
     const bestLineUci = best?.pv.slice(0, 10) ?? [];
     const replyLineUci = evals[i + 1][0]?.pv.slice(0, 8) ?? [];
     const m: MoveAnalysis = {
       ply: i, color, san: g.sans[i] ?? played, uci: played, fenBefore: fen, fenAfter: fens[i + 1],
       evalBefore: before, evalAfter: after, bestUci, bestSan: pvToSan(fen, [bestUci])[0] ?? bestUci,
       bestLine: pvToSan(fen, bestLineUci), bestLineUci,
+      bestCp: scoreOf(best), secondUci: second?.pv[0], secondSan: second?.pv[0] ? pvToSan(fen, [second.pv[0]])[0] : undefined, secondCp: second ? scoreOf(second) : undefined,
       replyLine: pvToSan(fens[i + 1], replyLineUci), replyLineUci,
       winLoss: Math.round(winLoss * 10) / 10,
       cpl: bestPlayed ? 0 : Math.min(1000, Math.max(0, moverBefore - moverAfter)),
@@ -128,7 +144,7 @@ const ERR = ['inaccuracy', 'mistake', 'blunder', 'miss'] as const;
 function counts(ms: MoveAnalysis[]): Counts {
   const c: Counts = { inaccuracy: 0, mistake: 0, blunder: 0, miss: 0, best: 0 };
   for (const m of ms) {
-    if (m.cls === 'best' || m.cls === 'excellent') c.best++;
+    if (m.cls === 'best' || m.cls === 'excellent' || m.cls === 'great' || m.cls === 'brilliant') c.best++;
     else if ((ERR as readonly string[]).includes(m.cls)) c[m.cls as keyof Counts]++;
   }
   return c;
