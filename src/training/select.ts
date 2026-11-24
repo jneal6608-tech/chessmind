@@ -43,7 +43,8 @@ export function pick(pool: Pool, o: PickOpts): Exercise[] {
     });
     // Spread across themes so a session is not one pattern repeated.
     const byTheme = new Map<string, Exercise[]>();
-    for (const e of inWin.sort(() => rand() - 0.5)) (byTheme.get(e.theme) ?? byTheme.set(e.theme, []).get(e.theme)!).push(e);
+    // Prefer exercises whose opponent's last move is known (it can be shown and replayed).
+    for (const e of inWin.sort(() => rand() - 0.5).sort((x, y) => Number(!!y.lastMove) - Number(!!x.lastMove))) (byTheme.get(e.theme) ?? byTheme.set(e.theme, []).get(e.theme)!).push(e);
     const queues = [...byTheme.values()];
     while (chosen.length < o.count && queues.some((q) => q.length)) for (const q of queues) { const e = q.shift(); if (e) take(e); }
   }

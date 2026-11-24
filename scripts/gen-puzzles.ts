@@ -67,7 +67,7 @@ async function buildSolution(fen: string, first: EvalLine[]): Promise<string[]> 
 const F: Record<string, number> = {};
 const CAP: Record<string, number> = { capture_hanging: 15, winning_capture: 15 };
 const f = (k: string) => { F[k] = (F[k] ?? 0) + 1; };
-async function considerTactic(fen: string, prevScoreForMover: number) {
+async function considerTactic(fen: string, prevScoreForMover: number, last?: { prevFen: string; lastMove: string }) {
   const ls = await lines(fen, 12, 2);
   if (ls.length < 2) return;
   f('t0'); if (scoreOf(ls[0]) >= 250) f('t_win');
@@ -98,7 +98,7 @@ async function considerTactic(fen: string, prevScoreForMover: number) {
     id: `bank-${theme}-${out.length}-${seedArg}`, source: 'bank', kind: 'tactic', theme, fen, solution: sol,
     rating: rateDifficulty(deep.depthTrail, sol[0], nPlayer, theme), phase: phaseOf(fen),
     prompt: '', explanation: motifs.map((m) => m.text).join('; '),
-    goal: 'best', evalCp: scoreOf(deep.lines[0]),
+    goal: 'best', evalCp: scoreOf(deep.lines[0]), ...last,
   });
 }
 function isBackRank(fen: string, pv: string[]) {
@@ -110,7 +110,7 @@ function isBackRank(fen: string, pv: string[]) {
 }
 
 /** "Your opponent threatens something": only one move holds the balance. */
-async function considerDefense(fen: string) {
+async function considerDefense(fen: string, last?: { prevFen: string; lastMove: string }) {
   const nm = nullMoveFen(fen);
   if (!nm) return;
   const s = await lines(fen, 12, 3);
@@ -133,7 +133,7 @@ async function considerDefense(fen: string) {
     id: `bank-${theme}-${out.length}-${seedArg}`, source: 'bank', kind: 'tactic', theme, fen, solution: [deep.lines[0].pv[0]],
     rating: rateDifficulty(deep.depthTrail, deep.lines[0].pv[0], 1, 'defense'), phase: phaseOf(fen),
     prompt: '', explanation: tm.map((m) => m.text).join('; '), threat: threat.pv[0],
-    goal: 'hold', evalCp: scoreOf(deep.lines[0]),
+    goal: 'hold', evalCp: scoreOf(deep.lines[0]), ...last,
   });
 }
 
@@ -166,14 +166,15 @@ async function selfPlay() {
   let prev = 0;
   const egTaken = { n: 0 };
   let lopsided = 0;
+  let last: { prevFen: string; lastMove: string } | undefined;
   for (let ply = 0; ply < (ENDGAME ? 220 : 160) && !c.isGameOver(); ply++) {
     const fen = c.fen();
     const r = await e.analyze(fen, { depth: 5 + Math.floor(rand() * 4), multipv: 4 });
     if (!r.lines.length) break;
     // Tactic opportunities show up after a weak move by the side that just moved.
     const inEg = phaseOf(fen) === 'endgame';
-    if (c.moveNumber() > 6 && (!ENDGAME || inEg)) await considerTactic(fen, -prev);
-    if (rand() < (ENDGAME ? 0.5 : 0.25) && c.moveNumber() > 8 && (!ENDGAME || inEg)) await considerDefense(fen);
+    if (c.moveNumber() > 6 && (!ENDGAME || inEg)) await considerTactic(fen, -prev, last);
+    if (rand() < (ENDGAME ? 0.5 : 0.25) && c.moveNumber() > 8 && (!ENDGAME || inEg)) await considerDefense(fen, last);
     if (phaseOf(fen) === 'endgame' && egTaken.n < 3 && rand() < 0.3) { await considerEndgame(fen); egTaken.n++; }
     // Pick a human-ish move: mostly good, sometimes the 2nd-4th choice.
     const best = scoreOf(r.lines[0]);
@@ -200,6 +201,7 @@ async function selfPlay() {
     }
     prev = best; // the mover's evaluation before their move (best play)
     if (Math.abs(scoreOf(pick)) > 1500 && ply > 20) break;
+    last = { prevFen: fen, lastMove: pick.pv[0] };
     tryMove(c, pick.pv[0]);
   }
 }

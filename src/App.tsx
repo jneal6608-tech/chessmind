@@ -44,7 +44,7 @@ export function App() {
   useEffect(() => setMore(false), [page]);
   let content;
   switch (page) {
-    case 'play': content = <PlayPage />; break;
+    case 'play': content = <PlayPage key={rest.join('/')} route={rest} />; break;
     case 'training': content = <TrainingPage route={rest} />; break;
     case 'review': content = <ReviewPage id={rest[0]} />; break;
     case 'openings': content = <OpeningsPage route={rest} />; break;

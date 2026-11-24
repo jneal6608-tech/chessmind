@@ -85,6 +85,17 @@ function positions(steps: LessonStep[]): string[] {
     return fen;
   });
 }
+/** The position before the last move of a step's line, and that move in SAN (for replaying it). */
+function beforeLast(s: LessonStep): { fen: string; san: string; by: 'White' | 'Black' } | undefined {
+  if (!s.moves) return undefined;
+  const ms = s.moves.split(' ');
+  const c = new Chess();
+  for (const m of ms.slice(0, -1)) c.move(m);
+  const by = c.turn() === 'w' ? 'White' : 'Black';
+  const fen = c.fen();
+  const san = c.move(ms[ms.length - 1]).san;
+  return { fen, san, by };
+}
 function lastMoveOf(s: LessonStep): [string, string] | undefined {
   if (!s.moves) return undefined;
   const c = new Chess(); let last;
@@ -107,6 +118,13 @@ function Lesson({ p, data }: { p: Principle; data: AppData }) {
   const [tries, setTries] = useState(0);
   const t0 = useState(() => Date.now())[0];
   const step = p.steps[i];
+  const prev = beforeLast(step);
+  const [replaying, setReplaying] = useState(false);
+  function replay() {
+    if (!prev || replaying) return;
+    setReplaying(true); setFen(prev.fen); setLast(undefined);
+    setTimeout(() => { setFen(base); setLast(lastMoveOf(step)); setReplaying(false); playSound('move'); }, 1100);
+  }
   const task = step.task;
   const base = fens[i];
   const side = new Chess(base).turn();
@@ -173,7 +191,7 @@ function Lesson({ p, data }: { p: Principle; data: AppData }) {
         <h1 className="h-display text-2xl">{p.title}</h1><p className="text-sm text-ink-300">{p.rule}</p></div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_400px] items-start">
         <div className="mx-auto w-full max-w-[min(100%,calc(100vh-200px))]">
-          <Board fen={fen} orientation={side === 'w' ? 'white' : 'black'} movable={task && (state === 'idle' || state === 'wrong') && !finished ? (side === 'w' ? 'white' : 'black') : 'none'}
+          <Board fen={fen} orientation={side === 'w' ? 'white' : 'black'} movable={task && (state === 'idle' || state === 'wrong') && !finished && !replaying ? (side === 'w' ? 'white' : 'black') : 'none'}
             onMove={onMove} lastMove={last} arrows={arrows} highlights={highlights} theme={data.settings.boardTheme} coords={data.settings.showCoords} />
         </div>
         <div className="space-y-3">
@@ -184,6 +202,12 @@ function Lesson({ p, data }: { p: Principle; data: AppData }) {
                 <Explained text={step.say} />
                 {task && <span className="mt-2 block font-semibold text-brass-300">Your move: {task.prompt}</span>}
               </CoachSays>
+              {prev && (state === 'idle' || !task) && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-2 text-sm">
+                  <span className="flex-1 text-ink-300">Last move: <b className="text-ink-100">{prev.san}</b> by {prev.by}</span>
+                  <button className="btn btn-sm" disabled={replaying || fen !== base} onClick={replay}>↺ Replay it</button>
+                </div>
+              )}
               {msg && <p className={`mt-3 text-sm ${state === 'right' || state === 'shown' ? 'text-good' : state === 'wrong' ? 'text-mistake' : 'text-ink-300'}`}><Explained text={msg} /></p>}
               {why && !why.ok && (
                 <div className="mt-2 rounded-lg bg-blunder/10 ring-1 ring-blunder/30 p-3 text-sm">

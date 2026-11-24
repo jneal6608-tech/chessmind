@@ -16,8 +16,10 @@ import { nextCard } from '../training/srs';
 import { playSound } from '../services/sound';
 import { tryIdea, storyFor, explainThreat, type Verdict, type Step, type ThreatInfo } from '../coach/teach';
 import { CoachSays, type Mood } from './Coach';
-import { THEME_GUIDE, coachIntro } from '../data/themeGuides';
+import { THEME_GUIDE, coachIntro, guideFor } from '../data/themeGuides';
 import { WhyBetter } from './WhyBetter';
+import { buildHints } from '../coach/hints';
+import { describeMove } from '../coach/teach';
 import { useAppData } from '../services/data';
 import { levelFor } from '../coach/explain';
 
@@ -29,6 +31,8 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
   const [state, setState] = useState<'solving' | 'checking' | 'wrong' | 'solved' | 'failed' | 'replying'>('solving');
   const [msg, setMsg] = useState('');
   const [hints, setHints] = useState(0);
+  const [hintLv, setHintLv] = useState(0);
+  const [replaying, setReplaying] = useState(false);
   const [arrows, setArrows] = useState<Arrow[]>([]);
   const [highlights, setHighlights] = useState<Record<string, 'hl-good' | 'hl-bad' | 'hl-info'>>({});
   const [last, setLast] = useState<[string, string] | undefined>();
@@ -46,6 +50,26 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
   const side = new Chess(ex.fen).turn();
   const orientation = side === 'w' ? 'white' : 'black';
   const playout = ex.goal === 'win' || ex.goal === 'draw';
+  const lastInfo = (() => {
+    if (ex.prevFen && ex.lastMove) return { prevFen: ex.prevFen, uci: ex.lastMove };
+    if (ex.gameId && ex.ply !== undefined && appData) {
+      const m = appData.games.find((g) => g.id === ex.gameId)?.analysis?.moves.find((x) => x.ply === ex.ply! - 1);
+      if (m && m.fenAfter.split(' ')[0] === ex.fen.split(' ')[0]) return { prevFen: m.fenBefore, uci: m.uci };
+    }
+    return null;
+  })();
+  const lastSq = (): [string, string] | undefined => (lastInfo ? [lastInfo.uci.slice(0, 2), lastInfo.uci.slice(2, 4)] : undefined);
+  const lastText = lastInfo ? (() => { const san = sanOf(lastInfo.prevFen, lastInfo.uci); return { san, words: describeMove(lastInfo.prevFen, lastInfo.uci, side) }; })() : null;
+  function replayLast() {
+    if (!lastInfo || replaying) return;
+    const mine = token.current;
+    setReplaying(true); setArrows([]); setHighlights({});
+    setFen(lastInfo.prevFen); setLast(undefined);
+    setTimeout(() => {
+      if (mine !== token.current) return;
+      setFen(ex.fen); setLast(lastSq()); playSound('move'); setReplaying(false);
+    }, 1100);
+  }
   const defending = ex.goal === 'hold' || ex.theme === 'defense' || ex.theme === 'mating_threat';
   async function loadThreat(): Promise<ThreatInfo | null> {
     if (threat) return threat;
@@ -63,7 +87,7 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
   }
 
   useEffect(() => {
-    setFen(ex.fen); setStep(0); setState('solving'); setMsg(''); setHints(0); setArrows([]); setHighlights({}); setLast(undefined);
+    setFen(ex.fen); setStep(0); setState('solving'); setMsg(''); setHints(0); setHintLv(0); setReplaying(false); setArrows([]); setHighlights({}); setLast(lastSq());
     setRecorded(false); setUserPlies(0); setPromoted(false); setWhy(null); setShowStep(null); setThreat(null); setThreatShown(false); t0.current = Date.now(); token.current++;
     // A defence exercise: show where the threat comes from only on request (hint).
   }, [ex.id]);
@@ -134,7 +158,7 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
       setFen(c.fen()); setLast([reply.slice(0, 2), reply.slice(2, 4)]); setHighlights({});
       playSound('move');
       if (step + 2 >= ex.solution.length) { setState('solved'); setMsg(successText()); void record(true); return; }
-      setStep(step + 2); setState('solving'); setMsg('Correct. Keep going: what now?');
+      setStep(step + 2); setHintLv(0); setState('solving'); setMsg('Correct. Keep going: what now?');
     }, 550);
   }
 
@@ -199,8 +223,14 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
     if (!exp) return;
     setHints((h) => h + 1);
     if (defending && !threatShown && step === 0) { setMsg('Hint: here is what they are threatening. Now find the move that stops it.'); await revealThreat(); return; }
-    if (hints === 0 || (defending && hints === 1)) { setHighlights({ [exp.slice(0, 2)]: 'hl-info' }); setMsg('Hint: this piece moves.'); }
-    else show(exp, 'blue');
+    // Teaching hints: the idea first, then the piece, then the move.
+    const hs = buildHints(fen, exp);
+    const h = hs[Math.min(hintLv, hs.length - 1)];
+    if (!h) { show(exp, 'blue'); return; }
+    setHintLv((n) => n + 1);
+    setMsg(`Hint ${Math.min(hintLv + 1, 3)}/3: ${h.text}`);
+    setHighlights(h.highlights);
+    setArrows(h.arrow ? [{ from: h.arrow.from, to: h.arrow.to, color: 'blue' }] : []);
   }
   function reveal() {
     token.current++;
@@ -224,14 +254,14 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
     };
     setTimeout(tick, 1100);
   }
-  function retry() { token.current++; setFen(ex.fen); setStep(0); setState('solving'); setMsg('Try again (your first result is already recorded).'); setArrows([]); setHighlights({}); setLast(undefined); setUserPlies(0); setPromoted(false); }
+  function retry() { token.current++; setFen(ex.fen); setStep(0); setState('solving'); setMsg('Try again (your first result is already recorded).'); setHintLv(0); setArrows([]); setHighlights({}); setLast(lastSq()); setUserPlies(0); setPromoted(false); }
 
   const goalText = ex.goal === 'win' ? 'Win this position against Stockfish' : ex.goal === 'draw' ? 'Hold the draw against Stockfish' : ex.goal === 'hold' ? 'Find the move that holds' : 'Find the best move';
   const done = state === 'solved' || state === 'failed';
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
       <div className="mx-auto w-full max-w-[min(100%,calc(100vh-190px))]">
-        <Board fen={fen} orientation={orientation} movable={(state === 'solving' || state === 'wrong') && !showStep ? orientation : 'none'} onMove={onMove} lastMove={last} arrows={arrows} highlights={highlights} />
+        <Board fen={fen} orientation={orientation} movable={(state === 'solving' || state === 'wrong') && !showStep && !replaying ? orientation : 'none'} onMove={onMove} lastMove={last} arrows={arrows} highlights={highlights} />
       </div>
       <div className="space-y-3">
         <div className="card p-4">
@@ -244,9 +274,15 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
             <span className="font-semibold">{side === 'w' ? 'White' : 'Black'} to move · {goalText}</span>
           </div>
           {ex.played && <p className="mt-1 text-xs text-ink-400">In the game you played {sanOf(ex.fen, ex.played)}.</p>}
+          {lastText && (
+            <div className="mt-2 flex items-start gap-2 rounded-lg bg-ink-900 px-3 py-2 text-sm">
+              <div className="min-w-0 flex-1"><span className="label !text-[10px] block">Their last move</span><span className="font-semibold text-ink-100">{lastText.san}</span> <span className="text-ink-300"><Explained text={lastText.words.replace(/^They /, 'they ')} /></span></div>
+              <button className="btn btn-sm shrink-0" disabled={replaying || step > 0 || fen !== ex.fen} onClick={replayLast}>↺ Replay it</button>
+            </div>
+          )}
           <CoachSays className="mt-3" mood={coachMood(state, hints)}>
             {msg ? <span className={state === 'solved' ? 'text-good' : state === 'failed' || state === 'wrong' ? 'text-mistake' : ''}><Explained text={msg} /></span>
-              : <><Explained text={ex.prompt || ''} />{!playout && <span className="block mt-1 text-ink-300"><Explained text={coachIntro(ex.theme, ex.goal, level)} /></span>}</>}
+              : <><Explained text={ex.prompt || ''} />{!playout && <span className="block mt-1 text-ink-300"><Explained text={coachIntro(ex.theme, ex.goal, level, !!lastInfo)} /></span>}</>}
           </CoachSays>
           {defending && !done && !threatShown && <button className="btn btn-sm mt-2" onClick={() => { setHints((h) => h + 1); void revealThreat(); }}>What are they threatening?</button>}
           {defending && threatShown && threat && (
@@ -272,7 +308,7 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
               <ol className="mt-1 space-y-1">{st.steps.map((x, j) => <li key={j} className="text-ink-200"><span className="font-mono text-xs text-ink-500 mr-1">{j + 1}.</span><Explained text={x.text} /></li>)}</ol>
               <p className="mt-1 text-ink-300">Result: <b className="text-ink-100">{st.result}</b>.</p>
             </div>) : null; })()}
-          {done && !playout && THEME_GUIDE[ex.theme] && <LessonBox theme={ex.theme} level={level} />}
+          {done && !playout && THEME_GUIDE[ex.theme] && <LessonBox theme={ex.theme} level={level} hasLast={!!lastInfo} />}
           {state === 'checking' && <p className="mt-3 text-sm text-ink-300 flex items-center gap-2"><Spinner /> Checking your move with Stockfish…</p>}
           {state === 'replying' && playout && <p className="mt-3 text-sm text-ink-300 flex items-center gap-2"><Spinner /> Engine is thinking…</p>}
           {playout && ex.explanation && <p className="mt-3 text-xs text-ink-400"><Explained text={ex.explanation} /></p>}
@@ -299,8 +335,8 @@ function coachMood(state: string, hints: number): Mood {
   return 'neutral';
 }
 
-function LessonBox({ theme, level }: { theme: string; level: string }) {
-  const g = THEME_GUIDE[theme];
+function LessonBox({ theme, level, hasLast }: { theme: string; level: string; hasLast: boolean }) {
+  const g = guideFor(theme, hasLast)!;
   return (
     <div className="mt-2 rounded-lg bg-brass-500/10 ring-1 ring-brass-500/30 p-3 text-sm">
       <div className="label !text-[10px]">The lesson: {THEME_LABEL[theme] ?? theme}</div>

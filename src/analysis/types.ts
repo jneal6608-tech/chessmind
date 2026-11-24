@@ -97,4 +97,6 @@ export interface GameRecord {
   analysis?: GameAnalysis;
   takebacks?: number;
   userElo?: number;
+  /** Opening-line practice: the line the bot followed, and where you left it (ply, book move, your move). */
+  book?: { lineId: string; name: string; plies: number; deviated?: { ply: number; book: string; played: string } };
 }

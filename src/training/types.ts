@@ -24,6 +24,9 @@ export interface Exercise {
   gameId?: string;
   ply?: number;
   title?: string;
+  /** The position before the opponent's last move, and that move (UCI), so it can be replayed. */
+  prevFen?: string;
+  lastMove?: string;
   /** Weakness key this exercise was created for (own-game exercises). */
   weakness?: string;
   /** Accept any move within this many win-% points of the best (own-game positions are not always unique). */

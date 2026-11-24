@@ -29,7 +29,7 @@ for (const x of all) {
     else x.theme = themeFromMotifs(motifs);
     if (motifs.length) x.explanation = motifs.map((m) => m.text).join('; ');
   }
-  x.prompt = x.goal === 'hold' ? (x.theme === 'mating_threat' ? 'Your opponent threatens mate. Find the only move that stops it.' : 'Your opponent is threatening something. Find the only move that holds.')
+  x.prompt = x.goal === 'hold' ? (x.theme === 'mating_threat' ? 'Your opponent threatens mate. Find the only move that stops it.' : 'Your opponent has a threat. First work out what it is, then find the only move that holds.')
     : x.goal === 'best' ? (x.theme.startsWith('mate') || x.theme === 'back_rank' ? 'There is a forced checkmate. Find it.' : 'Your opponent just made a mistake. Find the move that punishes it.')
       : x.goal === 'win' ? 'You are winning. Convert it against Stockfish: promote or mate.' : 'Hold the draw against Stockfish.';
   if (x.kind === 'endgame') x.explanation = x.goal === 'win' ? 'Activate your king, push passed pawns, avoid counterplay.' : 'Keep your pieces active and your king in front of the pawns.';
