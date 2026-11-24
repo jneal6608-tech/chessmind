@@ -25,9 +25,9 @@ function coilField(seed: number, step: number, x0: number, x1: number, y0: numbe
   return out;
 }
 const inTop = (x: number, y: number) => { const dx = (x - 100) / 50, dy = (y - 44) / 30; return dx * dx + dy * dy <= 1 && y <= 64; };
-const TOP = coilField(17, 9.5, 50, 150, 14, 64, inTop, (_x, y, r) => ({ r: 4.3 + r() * 1.4, tilt: (r() - 0.5) * 50, loops: y > 52 ? 3 : 2, tip: y < 50 || r() < 0.4 }));
-const FRINGE: Coil[] = [[72, 63], [81, 66], [90, 67], [99, 68], [108, 67], [117, 66], [126, 63]].map(([x, y], i) => ({ x, y, r: 3.6 + (i % 2) * 0.5, tilt: ((i * 37) % 30) - 15, loops: 3, tip: i % 3 === 0 }));
-const SIDES = coilField(29, 8, 42, 158, 50, 90, (x, y) => (x < 59 || x > 141) && Math.abs(x - 100) < 56 - Math.max(0, y - 80) * 0.6, (_x, _y, r) => ({ r: 3.7 + r() * 0.9, tilt: (r() - 0.5) * 30, loops: 2, tip: r() < 0.25 }));
+const TOP = coilField(17, 9.5, 50, 150, 14, 64, inTop, (_x, y, r) => ({ r: 4.3 + r() * 1.4, tilt: (r() - 0.5) * 50, loops: y > 52 ? 3 : 2, tip: r() < 0.55 }));
+const FRINGE: Coil[] = [[72, 63], [81, 66], [90, 67], [99, 68], [108, 67], [117, 66], [126, 63]].map(([x, y], i) => ({ x, y, r: 3.6 + (i % 2) * 0.5, tilt: ((i * 37) % 30) - 15, loops: 3, tip: i % 2 === 0 }));
+const SIDES = coilField(29, 8, 42, 158, 50, 90, (x, y) => (x < 59 || x > 141) && Math.abs(x - 100) < 56 - Math.max(0, y - 80) * 0.6, (_x, _y, r) => ({ r: 3.7 + r() * 0.9, tilt: (r() - 0.5) * 30, loops: 2, tip: r() < 0.4 }));
 const byY = (p: Coil, q: Coil) => p.y - q.y;
 TOP.sort(byY); SIDES.sort(byY);
 
@@ -36,10 +36,14 @@ function Ringlet({ c }: { c: Coil }) {
   const loops = [];
   for (let k = 0; k < c.loops; k++) {
     const cy = c.y + k * c.r * 1.0, rx = c.r * (1 - k * 0.08), ry = c.r * 0.68;
+    const end = k === c.loops - 1;
     loops.push(
       <g key={k}>
-        <ellipse cx={c.x} cy={cy} rx={rx} ry={ry} fill="#20150e" stroke="#2c1d13" strokeWidth="2.4" />
-        <path d={`M${c.x - rx * 0.75} ${cy - ry * 0.25} A${rx} ${ry} 0 0 1 ${c.x + rx * 0.35} ${cy - ry * 0.92}`} fill="none" stroke={c.tip ? '#8e643f' : '#4e3624'} strokeWidth="1.2" strokeLinecap="round" />
+        <ellipse cx={c.x} cy={cy} rx={rx} ry={ry} fill="#0b0908" stroke="#151110" strokeWidth="2.4" />
+        {/* soft sheen on black hair */}
+        <path d={`M${c.x - rx * 0.75} ${cy - ry * 0.25} A${rx} ${ry} 0 0 1 ${c.x + rx * 0.35} ${cy - ry * 0.92}`} fill="none" stroke="#3b3735" strokeWidth="1.1" strokeLinecap="round" opacity="0.8" />
+        {/* faded bleach at the tips of some coils */}
+        {end && c.tip && <path d={`M${c.x - rx * 0.8} ${cy + ry * 0.2} A${rx} ${ry} 0 0 0 ${c.x + rx * 0.7} ${cy + ry * 0.45}`} fill="none" stroke="#b39673" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />}
       </g>,
     );
   }
@@ -76,7 +80,7 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         <radialGradient id={u('iris')} cx="40%" cy="40%" r="60%"><stop offset="0" stopColor="#6b4325" /><stop offset="1" stopColor="#24150c" /></radialGradient>
         <linearGradient id={u('lens')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#3a2a24" /><stop offset="0.55" stopColor="#120c0a" /><stop offset="1" stopColor="#2a1d18" /></linearGradient>
         <linearGradient id={u('lip')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#6e3a2e" /><stop offset="1" stopColor="#8f5546" /></linearGradient>
-        <linearGradient id={u('fade')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1a120d" stopOpacity="0.85" /><stop offset="0.3" stopColor="#1a120d" stopOpacity="0.45" /><stop offset="0.65" stopColor="#1a120d" stopOpacity="0.15" /><stop offset="1" stopColor="#1a120d" stopOpacity="0" /></linearGradient>
+        <linearGradient id={u('fade')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0b0908" stopOpacity="0.85" /><stop offset="0.3" stopColor="#0b0908" stopOpacity="0.45" /><stop offset="0.65" stopColor="#0b0908" stopOpacity="0.15" /><stop offset="1" stopColor="#1a120d" stopOpacity="0" /></linearGradient>
         <clipPath id={u('clip')}><circle cx="100" cy="100" r="98" /></clipPath>
       </defs>
       <circle cx="100" cy="100" r="98" fill={`url(#${u('bg')})`} />
@@ -93,7 +97,7 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         <path d="M80 160 Q100 180 120 160" stroke="#c9ced4" strokeWidth="2.2" fill="none" strokeDasharray="2.6 1.4" />
         <path d="M80 160 Q100 180 120 160" stroke="#ffffff" strokeWidth="0.8" fill="none" strokeDasharray="1 3" opacity="0.8" />
         {/* side hair: coils down the sides of the head behind the temples, to the top of the ears */}
-        <path d="M60 50 Q47 58 48 74 Q49 86 55 94 Q60 90 62 80 Z M140 50 Q153 58 152 74 Q151 86 145 94 Q140 90 138 80 Z" fill="#180f0a" />
+        <path d="M60 50 Q47 58 48 74 Q49 86 55 94 Q60 90 62 80 Z M140 50 Q153 58 152 74 Q151 86 145 94 Q140 90 138 80 Z" fill="#0b0908" />
         {SIDES.map((c, i) => <Ringlet key={'s' + i} c={c} />)}
         {/* ears */}
         <path d="M58 96 Q48 94 48 106 Q49 120 60 124 Z" fill="#7c4a2f" />
@@ -115,7 +119,7 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         <path d="M59 58 L66 61 Q61 72 61 88 Q61 98 63 106 L58 106 Q55 92 55.5 76 Q56.5 64 59 58 Z" fill={`url(#${u('fade')})`} />
         <path d="M141 58 L134 61 Q139 72 139 88 Q139 98 137 106 L142 106 Q145 92 144.5 76 Q143.5 64 141 58 Z" fill={`url(#${u('fade')})`} />
         {/* rounded shape of defined coils on top */}
-        <ellipse cx="100" cy="45" rx="46" ry="25" fill="#180f0a" />
+        <ellipse cx="100" cy="45" rx="46" ry="25" fill="#0b0908" />
         {TOP.map((c, i) => <Ringlet key={'t' + i} c={c} />)}
         {FRINGE.map((c, i) => <Ringlet key={'f' + i} c={c} />)}
                 {/* brows */}
