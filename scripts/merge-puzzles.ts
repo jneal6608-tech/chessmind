@@ -40,8 +40,9 @@ const by: Record<string, Exercise[]> = {};
 for (const x of out) (by[x.theme] ??= []).push(x);
 const kept: Exercise[] = [];
 for (const [t, xs] of Object.entries(by)) {
-  // keep the hardest-looking ones when capping (higher raw rating first)
-  xs.sort((a, b) => b.rating - a.rating);
+  // When capping, keep puzzles that know the opponent's last move first (it can be shown
+  // and replayed), then the hardest-looking ones (higher raw rating first).
+  xs.sort((a, b) => Number(!!b.lastMove) - Number(!!a.lastMove) || b.rating - a.rating);
   const eg = xs.filter((x) => x.phase === 'endgame'), rest = xs.filter((x) => x.phase !== 'endgame');
   kept.push(...eg, ...rest.slice(0, CAPS[t] ?? 10000));
 }
