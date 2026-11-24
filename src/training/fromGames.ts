@@ -31,9 +31,9 @@ export function exercisesFromGame(g: GameRecord): Exercise[] {
       id: `game-${g.id}-${m.ply}`, source: 'game', kind: 'own_mistake', theme, fen: m.fenBefore,
       solution: m.bestLineUci.slice(0, n), rating: estimateRating(m), phase: m.phase,
       title: `${colorName(g.userColor)} vs ${opp}, move ${moveNo}`,
-      prompt: defending ? `Your opponent is threatening something. Find the move that holds.` : `You played ${m.san} here. Find the stronger move.`,
+      prompt: defending ? `Your opponent has a threat here. First work out what it is (tap "What are they threatening?" if you're stuck), then find the move that holds.` : `You played ${m.san} here. Find the stronger move.`,
       explanation: primary?.why ?? '', goal: defending ? 'hold' : 'best', evalCp: Math.round(moverBefore),
-      played: m.uci, gameId: g.id, ply: m.ply, weakness: primary?.key, tolerance: 4,
+      played: m.uci, threat: defending ? m.threatUci : undefined, gameId: g.id, ply: m.ply, weakness: primary?.key, tolerance: 4,
     });
   }
   return out;

@@ -8,6 +8,7 @@ import { VAL, PIECE_NAME, tryMove, attackedPieces, isDefended, material, findKin
 import { threatOn } from '../chess/tactics';
 import { detectMotifs } from '../chess/motifs';
 import type { CoachLevel } from './explain';
+import { compareMoves, type Comparison } from './compare';
 
 const whose = (c: Color, me: Color) => (c === me ? 'your' : 'their');
 const ref = (t: PieceSymbol, c: Color, sq: string, me: Color) => `${whose(c, me)} ${PIECE_NAME[t]} on ${sq}`;
@@ -109,11 +110,13 @@ export function settle(fen: string, ucis: string[], maxPly = 8): { plies: number
   const start = bal();
   let plies = 0;
   const lost: PieceSymbol[] = [], won: PieceSymbol[] = [];
+  let lastTo: Square | null = null, lastCapture = false;
   // Past maxPly, keep going only while the captures continue (never stop between a capture and its recapture).
   for (let i = 0; i < Math.min(maxPly + 6, ucis.length); i++) {
     const m = tryMove(c, ucis[i]);
     if (!m) break;
     plies = i + 1;
+    lastTo = m.to; lastCapture = !!m.captured;
     if (m.captured) (m.color === me ? won : lost).push(m.captured);
     if (m.promotion) (m.color === me ? won : lost).push(m.promotion); // a new queen counts as material gained
     const next = ucis[i + 1];
@@ -122,7 +125,22 @@ export function settle(fen: string, ucis: string[], maxPly = 8): { plies: number
     if (i >= 1 && !m.captured && !nextCaptures && !c.isCheck()) break;
     if (i >= maxPly - 1 && !nextCaptures) break;
   }
+  // The line stopped right after a capture (a short puzzle solution, say). If the
+  // piece can simply be taken back, the exchange is not over: finish it on that
+  // square, cheapest attacker first, as long as recapturing actually wins material (an optional even trade is not played).
+  if (lastCapture && lastTo && plies === ucis.length && !c.isGameOver()) finishExchange(c, lastTo, me, won, lost);
   return { plies, delta: bal() - start, lost, won };
+}
+
+function finishExchange(c: Chess, sq: Square, me: Color, won: PieceSymbol[], lost: PieceSymbol[]) {
+  for (let k = 0; k < 6 && !c.isGameOver(); k++) {
+    const caps = c.moves({ verbose: true }).filter((x) => x.to === sq && x.captured)
+      .sort((a, b) => VAL[a.piece] - VAL[b.piece]);
+    const best = caps.find((x) => seeMove(c.fen(), x.lan) > 0);
+    if (!best) return;
+    c.move(best);
+    (best.color === me ? won : lost).push(best.captured!);
+  }
 }
 
 const NAMES: Record<string, [string, string]> = { p: ['a pawn', 'pawns'], n: ['a knight', 'knights'], b: ['a bishop', 'bishops'], r: ['a rook', 'rooks'], q: ['a queen', 'queens'], k: ['the king', 'kings'] };
@@ -187,6 +205,8 @@ export interface Verdict {
   better?: { san: string; uci: string; story: Step[]; result: string };
   /** Full line (UCI) after the tried move, for stepping on the board. */
   lineUci: string[];
+  /** Why the engine's move is better (or as good), in words. Absent when you found the best move. */
+  compare?: Comparison;
 }
 
 /**
@@ -250,7 +270,15 @@ export async function tryIdea(engine: UciEngine, fen: string, uci: string, level
     const bs = narrate(fen, best.pv, me, Math.min(10, Math.max(n, bst.plies)));
     better = { san: bs[0]?.san ?? best.pv[0], uci: best.pv[0], story: bs, result: lineResult(fen, best.pv, bst) };
   }
-  return { ok, headline, story, result: finalResult, reason, better, lineUci: line };
+  let compare: Comparison | undefined;
+  if (!sameAsBest && best?.pv[0]) {
+    try {
+      compare = compareMoves(fen, { uci: best.pv[0], san: new Chess(fen).moves({ verbose: true }).find((x) => x.lan === best.pv[0])?.san ?? best.pv[0], cp: bestCp, pv: best.pv },
+        { uci, san: mv.san, cp: myCp, pv: line });
+    } catch { compare = undefined; }
+  }
+  const headline2 = ok && !sameAsBest && compare && !compare.equal ? `${mv.san} is playable, but ${compare.better.san} is stronger. Here's why.` : headline;
+  return { ok, headline: headline2, story, result: finalResult, reason, better, lineUci: line, compare };
 }
 
 function kingWorse(before: string, after: string, me: Color) {
@@ -289,3 +317,33 @@ export function storyFor(fen: string, ucis: string[], me: Color, level: CoachLev
 }
 export { parseUci };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+export interface ThreatInfo { uci: string; san: string; steps: Step[]; result: string; summary: string }
+/**
+ * "What are they threatening?" The move the opponent would play if it were
+ * their turn, told as a story with what it wins. `known` is a stored threat
+ * move (bank exercises); otherwise Stockfish finds it.
+ */
+export async function explainThreat(engine: UciEngine, fen: string, level: CoachLevel, known?: string): Promise<ThreatInfo | null> {
+  const me = new Chess(fen).turn();
+  const p = fen.split(' ');
+  if (new Chess(fen).isCheck()) return null;
+  p[1] = p[1] === 'w' ? 'b' : 'w'; p[3] = '-';
+  let nm: string;
+  try { nm = new Chess(p.join(' ')).fen(); } catch { return null; }
+  const r = await engine.analyze(nm, { depth: 13 });
+  const line = r.lines[0];
+  let pv = line?.pv ?? [];
+  if (known && pv[0] !== known) {
+    const r2 = await engine.analyze(nm, { depth: 12, searchmoves: [known] });
+    pv = r2.lines[0]?.pv ?? [known];
+  }
+  if (!pv.length) return null;
+  const st = storyFor(nm, pv, me, level);
+  const san = new Chess(nm).moves({ verbose: true }).find((x) => x.lan === pv[0])?.san ?? pv[0];
+  const first = describeMove(nm, pv[0], me).replace(/^They /, '').replace(/\.$/, '');
+  const summary = st.result.includes('checkmated')
+    ? `They are threatening checkmate, starting with ${san}. If you ignore it, ${st.result}.`
+    : `They are threatening ${san}: they would ${first}. If you ignore it, ${st.result}.`;
+  return { uci: pv[0], san, steps: st.steps, result: st.result, summary };
+}

@@ -10,6 +10,7 @@ import { tryMove, pawnInfo, kingShield, undeveloped, pieces, PIECE_NAME, VAL, op
 import { threatOn } from '../chess/tactics';
 import { detectMotifs } from '../chess/motifs';
 import { settle, lineResult, feel } from './teach';
+import { strategicReasons, planOf } from './positional';
 
 export interface Candidate {
   uci: string;
@@ -20,6 +21,8 @@ export interface Candidate {
   pv: string[];
 }
 export interface Comparison {
+  /** The position both moves are played from. */
+  fen: string;
   better: Candidate;
   worse: Candidate;
   /** True when the two moves are practically equal. */
@@ -124,7 +127,9 @@ export function compareMoves(fen: string, x: Candidate, y: Candidate): Compariso
 
   const king: string[] = [];
   if (a1.castle && !b1.castle) king.push(`${B.san} gives up your right to castle`);
-  if (b1.shield < a1.shield) king.push(`${B.san} weakens the pawns in front of your king`);
+  const kA = after(fen, [A.uci]).board().flat().find((p) => p?.type === 'k' && p.color === me)?.square;
+  const kB = after(fen, [B.uci]).board().flat().find((p) => p?.type === 'k' && p.color === me)?.square;
+  if (kA && kA === kB && b1.shield < a1.shield) king.push(`${B.san} weakens the pawns in front of your king`);
   if (king.length) reasons.push(capSafe(king.join(', and ')) + '.');
 
   if (b.loose.length && b.loose.length > a.loose.length) {
@@ -141,17 +146,26 @@ export function compareMoves(fen: string, x: Candidate, y: Candidate): Compariso
   const motB = new Set(detectMotifs(fen, B.uci).map((m) => m.kind));
   if (motA && !motB.has(motA.kind)) reasons.unshift(`${A.san}: ${motA.text}.`);
 
+  // 5. Strategy in words: outposts, open files, threats, prophylaxis, the plan.
+  let strat: string[] = [];
+  try { strat = strategicReasons(fen, { uci: A.uci, san: A.san, pv: lineA }, { uci: B.uci, san: B.san, pv: lineB }); } catch { strat = []; }
+  for (const r of strat) if (!reasons.includes(r)) reasons.push(r);
+
   if (!reasons.length) {
-    reasons.push(equal
-      ? `Both lead to similar positions; neither changes the material or the pawns.`
-      : `The difference is in the longer run: Stockfish's line after ${A.san} (${shortLine(fen, lineA)}) keeps more pressure than after ${B.san} (${shortLine(fen, lineB)}).`);
+    if (equal) reasons.push(`Both lead to similar positions; neither changes the material or the pawns, so pick the one whose plan you understand.`);
+    else {
+      const plan = (() => { try { return planOf(fen, lineA); } catch { return null; } })();
+      reasons.push(plan
+        ? `${plan.text} ${plan.ideas[0].text}`
+        : `Nothing is lost right away. The difference is the follow-up: after ${A.san} (${shortLine(fen, lineA)}) your pieces keep the initiative, while after ${B.san} (${shortLine(fen, lineB)}) they get time to organise. When two moves look similar, prefer the one that makes a threat or improves your worst piece.`);
+    }
   }
 
   const evalA = formatScore(me === 'w' ? A.cp : -A.cp), evalB = formatScore(me === 'w' ? B.cp : -B.cp);
   const summary = equal
     ? `${A.san} and ${B.san} are about equally good (${evalA} vs ${evalB}).`
     : `${A.san} is better than ${B.san}: with ${A.san} ${feel(A.cp)} (${evalA}), with ${B.san} ${feel(B.cp)} (${evalB})${Math.abs(pawns) >= 0.3 && Math.abs(A.cp) < 9000 && Math.abs(B.cp) < 9000 ? `, a difference of about ${Math.abs(pawns).toFixed(1)} pawn${Math.abs(pawns) >= 1.5 ? 's' : ''}` : ''}.`;
-  return { better: A, worse: B, equal, summary, reasons: reasons.slice(0, 5), betterResult: resA, worseResult: resB };
+  return { fen, better: A, worse: B, equal, summary, reasons: reasons.slice(0, 6), betterResult: resA, worseResult: resB };
 }
 
 function shortLine(fen: string, ucis: string[]) {
