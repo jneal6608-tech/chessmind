@@ -9,6 +9,7 @@ import { Board, type Arrow } from '../ui/Board';
 import { CoachSays, CoachAvatar, type Mood } from '../ui/Coach';
 import { Explained } from '../ui/Explained';
 import { useAppData, type AppData } from '../services/data';
+import type { LessonRecord } from '../store/lessons';
 import { PRINCIPLES, PRINCIPLE_BY_ID, CATEGORIES, LEVEL_LABEL, principlesFor, type Principle, type LessonStep } from '../data/principles';
 import { WEAKNESS } from '../training/themes';
 import { coachEngine } from '../engine/browser';
@@ -18,14 +19,11 @@ import { tryIdea, type Verdict } from '../coach/teach';
 import { levelFor } from '../coach/explain';
 import { go } from '../services/router';
 import { playSound } from '../services/sound';
+import { recordLesson } from '../store/lessons';
+import { attempts as ATT } from '../store/db';
+import { uid } from '../chess/util';
 
-const DONE_KEY = 'chessmind-lessons-done';
-function loadDone(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(DONE_KEY) ?? '[]') as string[]); } catch { return new Set(); }
-}
-function markDone(id: string) {
-  try { const s = loadDone(); s.add(id); localStorage.setItem(DONE_KEY, JSON.stringify([...s])); } catch { /* storage unavailable */ }
-}
+const LEVEL_RATING = { club: 1300, advanced: 1600, expert: 1900 } as const;
 
 export function PrinciplesPage({ route }: { route: string[] }) {
   const [data] = useAppData();
@@ -38,7 +36,7 @@ export function PrinciplesPage({ route }: { route: string[] }) {
 }
 
 function Home({ data }: { data: AppData }) {
-  const done = useMemo(loadDone, []);
+  const done = useMemo(() => new Set(Object.keys(data.lessons)), [data.lessons]);
   const top = data.profile.top.map((w) => w.key);
   const recs = principlesFor([...top, ...data.profile.stats.slice(0, 6).map((s) => s.key)]).slice(0, 4);
   const level = levelFor(data.strength.rating, data.settings.coachLevel);
@@ -54,17 +52,18 @@ function Home({ data }: { data: AppData }) {
           <span className="block mt-1 text-xs text-ink-400">{done.size}/{PRINCIPLES.length} lessons done · explanations at {level === 'beginner' ? 'simple' : level === 'intermediate' ? 'club' : 'advanced'} level</span>
         </CoachSays>
         <div className="mt-3"><Bar value={done.size} max={PRINCIPLES.length} /></div>
-        {recs.length > 0 && <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">{recs.map((p) => <LessonCard key={p.id} p={p} done={done.has(p.id)} why={p.fixes.filter((k) => top.includes(k)).map((k) => WEAKNESS[k]?.label).join(', ')} />)}</div>}
+        {recs.length > 0 && <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">{recs.map((p) => <LessonCard key={p.id} p={p} rec={data.lessons[p.id]} why={p.fixes.filter((k) => top.includes(k)).map((k) => WEAKNESS[k]?.label).join(', ')} />)}</div>}
       </Card>
       <div className="mb-4 flex flex-wrap gap-1.5">
         {['all', ...CATEGORIES].map((c) => <button key={c} onClick={() => setCat(c)} className={`chip !py-1 ${cat === c ? 'text-brass-300 border-brass-600' : ''}`}>{c === 'all' ? 'All' : c}</button>)}
       </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{list.map((p) => <LessonCard key={p.id} p={p} done={done.has(p.id)} />)}</div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{list.map((p) => <LessonCard key={p.id} p={p} rec={data.lessons[p.id]} />)}</div>
     </Page>
   );
 }
 
-function LessonCard({ p, done, why }: { p: Principle; done: boolean; why?: string }) {
+function LessonCard({ p, rec, why }: { p: Principle; rec?: LessonRecord; why?: string }) {
+  const done = !!rec;
   const tasks = p.steps.filter((s) => s.task).length;
   return (
     <a href={`#/principles/lesson/${p.id}`} className="card p-4 hover:border-ink-500 transition-colors flex flex-col">
@@ -72,6 +71,7 @@ function LessonCard({ p, done, why }: { p: Principle; done: boolean; why?: strin
       <div className="mt-1 font-semibold h-display text-lg leading-snug">{p.title}{done && <span className="ml-1 text-good text-sm">✓</span>}</div>
       <p className="mt-1 text-sm text-ink-300 flex-1">{p.rule}</p>
       <div className="mt-2 text-[11px] text-ink-500">{p.steps.length} steps{tasks ? ` · ${tasks} challenge${tasks > 1 ? 's' : ''}` : ''}{why ? ` · fixes: ${why}` : ''}</div>
+      {rec && <div className="mt-1 text-[11px] text-good">Done {new Date(rec.completedAt).toLocaleDateString()}{rec.total ? ` · ${rec.right}/${rec.total} first try` : ''}{rec.times > 1 ? ` · ${rec.times}×` : ''}</div>}
     </a>
   );
 }
@@ -102,11 +102,20 @@ function Lesson({ p, data }: { p: Principle; data: AppData }) {
   const [why, setWhy] = useState<Verdict | null>(null);
   const [last, setLast] = useState<[string, string] | undefined>();
   const [finished, setFinished] = useState(false);
+  // First-try result of each challenge step (step index -> solved first try?)
+  const [results, setResults] = useState<Record<number, boolean>>({});
+  const [tries, setTries] = useState(0);
+  const t0 = useState(() => Date.now())[0];
   const step = p.steps[i];
   const task = step.task;
   const base = fens[i];
   const side = new Chess(base).turn();
-  useEffect(() => { setFen(base); setState('idle'); setMsg(''); setWhy(null); setLast(lastMoveOf(step)); }, [i]);
+  useEffect(() => { setFen(base); setState('idle'); setMsg(''); setWhy(null); setLast(lastMoveOf(step)); setTries(0); }, [i]);
+  function scoreTask(success: boolean) {
+    if (i in results) return; // only the first attempt counts
+    setResults((r) => ({ ...r, [i]: success }));
+    void ATT.add({ id: uid(), exerciseId: `lesson:${p.id}:${i}`, date: Date.now(), success, timeMs: Date.now() - t0, theme: 'lesson', kind: 'lesson', rating: LEVEL_RATING[p.level], hints: 0, mode: 'lesson' });
+  }
 
   const arrows: Arrow[] = state === 'right' || state === 'wrong' ? [] : (step.arrows ?? []).map((a) => {
     const [mv, color] = a.split(':');
@@ -128,7 +137,7 @@ function Lesson({ p, data }: { p: Principle; data: AppData }) {
       const after = c.isGameOver() ? null : (await coachEngine.analyze(c.fen(), { depth: 13 })).lines[0];
       const wB = winPct(scoreOf(best)), wM = after ? winPct(-scoreOf(after)) : (c.isCheckmate() ? 100 : 50);
       if (wB - wM <= 3) { win(mv.san, false, true); return; }
-      setState('wrong'); playSound('bad');
+      setState('wrong'); playSound('bad'); setTries((n) => n + 1); scoreTask(false);
       setMsg(`${mv.san} is not it. ${task.wrong ?? ''}`.trim());
       const v = await tryIdea(coachEngine, base, uci, level);
       setWhy(v);
@@ -137,10 +146,11 @@ function Lesson({ p, data }: { p: Principle; data: AppData }) {
     }
   }
   function win(san: string, main: boolean, engine = false) {
-    setState('right'); playSound('good');
+    setState('right'); playSound('good'); scoreTask(tries === 0);
     setMsg(main ? task!.success : engine ? `${san} works too: Stockfish rates it as good as the main idea. The lesson move was ${task!.answers[0]}. ${task!.success}` : `${san} is good too. ${task!.success}`);
   }
   function show() {
+    scoreTask(false);
     const c = new Chess(base);
     const mv = c.move(task!.answers[0]);
     setFen(c.fen()); setLast([mv.from, mv.to]); setState('shown'); setWhy(null);
@@ -148,7 +158,11 @@ function Lesson({ p, data }: { p: Principle; data: AppData }) {
   }
   function next() {
     if (i < p.steps.length - 1) setI(i + 1);
-    else { markDone(p.id); setFinished(true); playSound('good'); }
+    else {
+      const total = p.steps.filter((s) => s.task).length;
+      void recordLesson(p.id, Object.values(results).filter(Boolean).length, total);
+      setFinished(true); playSound('good');
+    }
   }
   const mood: Mood = state === 'right' ? 'cool' : state === 'wrong' ? 'concerned' : state === 'checking' ? 'thinking' : task ? 'thinking' : 'neutral';
   const canGoOn = !task || state === 'right' || state === 'shown';
@@ -187,13 +201,15 @@ function Lesson({ p, data }: { p: Principle; data: AppData }) {
             </Card>
           ) : (
             <Card className="card-hi">
-              <div className="flex items-center gap-3"><CoachAvatar mood="cool" size={64} /><div className="h-display text-xl">Lesson complete</div></div>
+              <div className="flex items-center gap-3"><CoachAvatar mood={Object.values(results).every(Boolean) ? 'cool' : 'happy'} size={64} />
+                <div><div className="h-display text-xl">Lesson complete</div>
+                  {Object.keys(results).length > 0 && <div className="text-sm text-ink-300">{Object.values(results).filter(Boolean).length}/{Object.keys(results).length} challenges solved on the first try{Object.values(results).every(Boolean) ? '. Clean!' : '. Replay it in a few days to lock it in.'}</div>}</div></div>
               <div className="label mt-4 mb-1">Remember</div>
               <ul className="list-disc pl-5 space-y-1 text-sm text-ink-200">{p.takeaways.map((t) => <li key={t}><Explained text={t} /></li>)}</ul>
               <div className="mt-4 flex flex-wrap gap-2">
                 {p.fixes[0] && <button className="btn btn-primary btn-sm" onClick={() => go(`training/session/weakness/${p.fixes[0]}`)}>Train it now: {WEAKNESS[p.fixes[0]]?.label}</button>}
                 {p.endgame && <button className="btn btn-sm" onClick={() => go(`training/solve/theory-${p.endgame}`)}>Play the endgame vs Stockfish</button>}
-                <button className="btn btn-sm" onClick={() => { setFinished(false); setI(0); }}>Replay</button>
+                <button className="btn btn-sm" onClick={() => { setFinished(false); setI(0); setResults({}); }}>Replay</button>
                 <button className="btn btn-sm" onClick={() => go('principles')}>All lessons</button>
               </div>
             </Card>

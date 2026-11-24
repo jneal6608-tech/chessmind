@@ -3,6 +3,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { GameRecord } from '../analysis/types';
 import type { Exercise } from '../training/types';
+import { mergeLessons } from './lessons';
 
 export interface Attempt {
   id: string;
@@ -152,7 +153,15 @@ export async function importAll(json: string, mode: 'merge' | 'replace' = 'merge
     if (!(s in data)) continue;
     const tx = d.transaction(s, 'readwrite');
     if (mode === 'replace') await tx.store.clear();
-    if (s === 'kv') for (const [k, v] of Object.entries(data.kv as Record<string, unknown>)) await tx.store.put(v as never, k as never);
+    if (s === 'kv') {
+      for (const [k, v] of Object.entries(data.kv as Record<string, unknown>)) {
+        // Lesson progress is merged, so importing a backup never loses lessons done on this device.
+        if (k === 'lessons' && mode === 'merge') {
+          const cur = ((await tx.store.get('lessons' as never)) ?? {}) as Record<string, never>;
+          await tx.store.put(mergeLessons(cur, v as Record<string, never>) as never, k as never);
+        } else await tx.store.put(v as never, k as never);
+      }
+    }
     else for (const v of data[s] as unknown[]) await tx.store.put(v as never);
     await tx.done;
   }

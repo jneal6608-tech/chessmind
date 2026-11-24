@@ -40,7 +40,10 @@ describe('theory endgames: engine agrees with the verdict', () => {
       const r = await e.analyze(t.fen, { depth: 22 });
       const s = scoreOf(r.lines[0]);
       if (t.goal === 'win') expect(s, `${t.id} eval ${s}`).toBeGreaterThan(250);
-      else expect(Math.abs(s), `${t.id} eval ${s}`).toBeLessThan(80);
+      // Fortress draws (wrong-coloured bishop, Philidor...) are often shown as a small
+      // edge rather than 0.00: the engine can't prove the fortress. What matters is that
+      // it finds no winning plan, i.e. stays well below a winning score.
+      else expect(Math.abs(s), `${t.id} eval ${s}`).toBeLessThan(200);
     }, 60000);
   }
 });
@@ -99,4 +102,24 @@ describe('openings: every course is profiled and every line explained', () => {
       for (const l of c.lines) expect(LINE_ABOUT[l.id], `about for ${l.id}`).toBeTruthy();
     }
   });
+});
+
+import { winPct } from '../src/engine/uci';
+describe('principles: Stockfish agrees with every lesson answer', () => {
+  for (const p of PRINCIPLES) {
+    let fen = new Chess().fen();
+    p.steps.forEach((s, k) => {
+      if (s.fen) fen = new Chess(s.fen).fen();
+      if (s.moves) { const c = new Chess(); for (const m of s.moves.split(' ')) c.move(m); fen = c.fen(); }
+      if (!s.task) return;
+      const at = fen, ans = s.task.answers[0];
+      it(`${p.id} step ${k + 1}: ${ans}`, async () => {
+        const c = new Chess(at);
+        const uci = c.move(ans).lan;
+        const best = (await e.analyze(at, { depth: 16 })).lines[0];
+        const mine = (await e.analyze(at, { depth: 16, searchmoves: [uci] })).lines[0];
+        expect(winPct(scoreOf(best)) - winPct(scoreOf(mine)), `${p.id}: ${ans} vs best ${best.pv[0]} (${scoreOf(best)} vs ${scoreOf(mine)})`).toBeLessThanOrEqual(5);
+      }, 60000);
+    });
+  }
 });

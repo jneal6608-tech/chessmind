@@ -75,7 +75,10 @@ headers (COOP/COEP) are needed.
 - **Principles** (`#/principles`). 32 guided lessons (thinking, openings, pawn
   structures, pieces, strategy, attack and defence, endgames) at club, advanced and
   expert level, with engine-checked "your move" challenges. Lessons that fix your own
-  weaknesses are recommended first (`src/data/principles.ts`).
+  weaknesses are recommended first (`src/data/principles.ts`). Every lesson has at least
+  one board challenge, and a test checks each answer against Stockfish. Progress and
+  first-try results are stored in the app database, so they are part of the Settings
+  backup and merge when you import it on another device (`src/store/lessons.ts`).
 - **Openings with a profile.** Every opening is labelled sharp / balanced / positional,
   light / medium / heavy theory and attacking / counterattacking / solid / defensive,
   with its typical middlegame, who it suits and what to know first; every line is
