@@ -53,11 +53,11 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
   const lid = mood === 'happy' ? 2.5 : mood === 'concerned' ? 1 : mood === 'thinking' ? 1.5 : 0.5; // hooded, relaxed lids
   const lookX = mood === 'thinking' ? 3 : 0, lookY = mood === 'thinking' ? -1.5 : 0;
   const smile = mood === 'happy' || mood === 'excited';
-  const mouth = mood === 'cool' ? { up: 'M84 141 Q92 138 100 139 Q108 138 116 141', low: 'M84 141 Q100 152 116 141 Q100 146 84 141 Z' }
+  const mouth = mood === 'cool' ? { up: 'M85 142 Q93 140 100 141 Q109 140 117 137', low: 'M85 142 Q101 150 117 137 Q101 145 85 142 Z' }
     : mood === 'excited' ? { up: 'M83 140 Q100 136 117 140', low: 'M83 140 Q100 158 117 140 Z' }
     : mood === 'concerned' ? { up: 'M86 144 Q93 140 100 141 Q107 140 114 144', low: 'M86 144 Q100 149 114 144 Q100 145 86 144 Z' }
     : mood === 'thinking' ? { up: 'M86 143 Q94 140 100 141 Q108 139 115 140', low: 'M86 143 Q101 148 115 140 Q101 144 86 143 Z' }
-    : { up: 'M85 142 Q93 139 100 140 Q107 139 115 142', low: 'M85 142 Q100 150 115 142 Q100 145 85 142 Z' };
+    : { up: 'M86 141 Q93 140 100 141 Q107 140 114 141', low: 'M86 141 Q100 149 114 141 Q100 144 86 141 Z' };
   return (
     <svg viewBox="0 0 200 200" width={size} height={size} className={className} role="img" aria-label="Your coach">
       <defs>
