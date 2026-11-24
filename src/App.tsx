@@ -9,6 +9,7 @@ const TrainingPage = lazy(() => import('./pages/Training').then((m) => ({ defaul
 const ReviewPage = lazy(() => import('./pages/Review').then((m) => ({ default: m.ReviewPage })));
 const OpeningsPage = lazy(() => import('./pages/Openings').then((m) => ({ default: m.OpeningsPage })));
 const AnalysisPage = lazy(() => import('./pages/Analysis').then((m) => ({ default: m.AnalysisPage })));
+const PrinciplesPage = lazy(() => import('./pages/Principles').then((m) => ({ default: m.PrinciplesPage })));
 const CoachPage = lazy(() => import('./pages/Coach').then((m) => ({ default: m.CoachPage })));
 const StatsPage = lazy(() => import('./pages/Stats').then((m) => ({ default: m.StatsPage })));
 const SettingsPage = lazy(() => import('./pages/Settings').then((m) => ({ default: m.SettingsPage })));
@@ -23,6 +24,7 @@ const NAV = [
   { id: 'review', label: 'Game Analysis', icon: 'M4 19V5m0 14h16M8 15l3-4 3 2 5-6' },
   { id: 'analysis', label: 'Analysis Board', icon: 'M4 4h16v16H4zM4 12h16M12 4v16M8 8h.01M16 16h.01' },
   { id: 'openings', label: 'Openings', icon: 'M4 5a2 2 0 012-2h5v18H6a2 2 0 01-2-2zM13 3h5a2 2 0 012 2v14a2 2 0 01-2 2h-5z' },
+  { id: 'principles', label: 'Principles', icon: 'M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z M9 12l2 2 4-4' },
   { id: 'coach', label: 'AI Coach', icon: 'M4 5h16v11H9l-5 4z M8 9h8M8 12h5' },
   { id: 'stats', label: 'Statistics', icon: 'M5 20V10m7 10V4m7 16v-7' },
   { id: 'settings', label: 'Settings', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19 12l2-1-1-3-2 .2-1.4-1.4L17 5l-3-1-1 2h-2L10 4 7 5l.4 2-1.4 1.4L4 8.2 3 11l2 1v0l-2 1 1 3 2-.2 1.4 1.4L7 19l3 1 1-2h2l1 2 3-1-.4-2 1.4-1.4 2 .2 1-3z' },
@@ -47,6 +49,7 @@ export function App() {
     case 'review': content = <ReviewPage id={rest[0]} />; break;
     case 'openings': content = <OpeningsPage route={rest} />; break;
     case 'analysis': content = <AnalysisPage key={rest[0] ?? 'free'} fenParam={rest[0]} />; break;
+    case 'principles': content = <PrinciplesPage route={rest} />; break;
     case 'coach': content = <CoachPage key={rest[0] ?? 'free'} fenParam={rest[0]} />; break;
     case 'stats': content = <StatsPage />; break;
     case 'settings': content = <SettingsPage />; break;

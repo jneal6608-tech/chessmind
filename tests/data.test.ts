@@ -73,3 +73,20 @@ describe('exercise bank', () => {
     for (const w of WEAKNESSES) expect(w.train.length).toBeGreaterThan(0);
   });
 });
+
+import { PRINCIPLES } from '../src/data/principles';
+describe('principles: every lesson position and answer is legal', () => {
+  for (const p of PRINCIPLES) {
+    it(p.title, () => {
+      let fen = new Chess().fen();
+      for (const s of p.steps) {
+        if (s.fen) fen = new Chess(s.fen).fen();
+        if (s.moves) { const c = new Chess(); for (const m of s.moves.split(' ')) expect(() => c.move(m), `${p.id}: ${m}`).not.toThrow(); fen = c.fen(); }
+        for (const a of s.arrows ?? []) expect(a, `${p.id} arrow`).toMatch(/^[a-h][1-8][a-h][1-8](:(red|blue|yellow|green))?$/);
+        if (s.task) for (const ans of s.task.answers) expect(() => new Chess(fen).move(ans), `${p.id}: answer ${ans}`).not.toThrow();
+      }
+      for (const k of p.fixes) expect(WEAKNESSES.some((w) => w.key === k), `${p.id}: weakness ${k}`).toBe(true);
+    });
+  }
+  it('ids are unique', () => expect(new Set(PRINCIPLES.map((p) => p.id)).size).toBe(PRINCIPLES.length));
+});

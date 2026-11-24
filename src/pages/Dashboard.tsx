@@ -12,6 +12,8 @@ import { weeklyReport } from '../analysis/weekly';
 import { recommendLevel, levelById } from '../engine/opponent';
 import { scoreFor } from '../analysis/strength';
 import { go } from '../services/router';
+import { diagnose, type Diagnosis } from '../analysis/diagnosis';
+import { CoachSays } from '../ui/Coach';
 
 export function DashboardPage() {
   const [data] = useAppData();
@@ -62,6 +64,8 @@ export function DashboardPage() {
         <Card><Stat label="Blunders / game" value={bl === null ? '—' : bl.toFixed(1)} sub="last 10 analysed games" tone={bl !== null && bl >= 1.5 ? 'text-blunder' : undefined} /></Card>
         <Card><Stat label="Training streak" value={`${st} day${st === 1 ? '' : 's'}`} sub={today?.completedAt ? 'today done ✓' : 'daily challenge open'} /></Card>
       </div>
+
+      <RoadTo2000 d={diagnose(data.games, data.attempts, data.profile, ext?.rating ?? data.strength.rating, Math.max(2000, (ext?.rating ?? data.strength.rating) >= 2000 ? nextGoal : 2000))} />
 
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2" title="What to work on" right={<a href="#/stats" className="text-xs text-brass-300">full profile →</a>}>
@@ -115,5 +119,45 @@ export function DashboardPage() {
         </Card>
       </div>
     </Page>
+  );
+}
+
+function RoadTo2000({ d }: { d: Diagnosis }) {
+  const [plan, setPlan] = useState(false);
+  return (
+    <Card className="mt-5 card-hi" title={`Road to ${d.rating + d.gap}`} right={<button className="text-xs text-brass-300" onClick={() => setPlan(!plan)}>{plan ? 'hide' : 'your 7-day plan'} →</button>}>
+      <CoachSays mood={d.enough ? (d.findings.length ? 'thinking' : 'happy') : 'neutral'} size={64} text={d.headline} />
+      {d.enough && (
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+          <div>
+            <div className="label mb-1">You vs a 2000 player</div>
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-1 text-sm">
+              {d.benchmarks.filter((b) => b.you !== null).map((b) => (
+                <div key={b.key} className="contents" title={b.note}>
+                  <span className="text-ink-300">{b.label}</span>
+                  <span className={`tabular-nums text-right font-semibold ${b.ok ? 'text-good' : 'text-mistake'}`}>{b.fmt(b.you!)}</span>
+                  <span className="tabular-nums text-right text-ink-500">{b.better === 'up' ? '≥' : '≤'} {b.fmt(b.target)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="label mb-1">What is holding you back</div>
+            {d.findings.length ? d.findings.map((f, i) => (
+              <div key={f.key} className="rounded-xl bg-ink-900/60 p-3">
+                <div className="font-semibold"><span className="text-brass-400 mr-1">{i + 1}.</span>{f.title}</div>
+                <p className="mt-1 text-sm text-ink-300"><Explained text={f.detail} /></p>
+                <div className="mt-2 flex flex-wrap gap-1.5">{f.actions.map((a) => <button key={a.path} className="btn btn-sm" onClick={() => go(a.path)}>{a.label}</button>)}</div>
+              </div>
+            )) : <p className="text-sm text-ink-400">No big leaks in your recent games. Keep the routine and play longer games.</p>}
+          </div>
+        </div>
+      )}
+      {plan && (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {d.plan.map((p) => <div key={p.day} className="rounded-lg bg-ink-900/60 p-3 text-sm"><div className="font-semibold text-brass-300">{p.day}</div><ul className="mt-1 list-disc pl-4 space-y-0.5 text-ink-300">{p.tasks.map((t) => <li key={t}>{t}</li>)}</ul></div>)}
+        </div>
+      )}
+    </Card>
   );
 }
