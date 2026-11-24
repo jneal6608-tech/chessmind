@@ -3,6 +3,7 @@
 // follow-up: open either line on a board and play moves for BOTH sides, with
 // a live evaluation, move labels and the same explanations for every try.
 import { lazy, Suspense, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Chess } from 'chess.js';
 import type { Comparison } from '../coach/compare';
 import { Explained } from './Explained';
@@ -30,15 +31,16 @@ export function WhyBetter({ c, title, className = '' }: { c: Comparison; title?:
         <button className="btn btn-sm" onClick={() => setOpen({ line: [], title: 'Try your own moves for both sides' })}>Try my own moves</button>
       </div>
       <p className="mt-1 text-[11px] text-ink-500">Step through the line with ◀ ▶, or make any move for either side: the board answers with the evaluation, a label and why.</p>
-      {open && (
+      {open && createPortal(
         <div data-explorer className="fixed inset-0 z-50 overflow-y-auto bg-ink-950/95 backdrop-blur p-2 sm:p-6">
           <div className="mx-auto max-w-[1320px]">
             <Suspense fallback={<Spinner />}>
-              <AnalysisBoard fen={c.fen} initialLine={open.line} gameMove={c.worse.uci} orientation={side === 'w' ? 'white' : 'black'} title={open.title}
+              <AnalysisBoard fen={c.fen} initialLine={open.line} orientation={side === 'w' ? 'white' : 'black'} title={open.title}
                 intro={`Both sides are yours to move. Compare ${c.better.san} with ${c.worse.san}: play the opponent's best replies, then try your ideas.`} onClose={() => setOpen(null)} />
             </Suspense>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

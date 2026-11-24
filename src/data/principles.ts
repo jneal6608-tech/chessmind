@@ -299,6 +299,125 @@ export const PRINCIPLES: Principle[] = [
     ],
     takeaways: ['Winning? Kill counterplay first.', 'Improve all pieces before the breakthrough.', 'Trade pieces, not pawns.'],
   },
+  // ───────────────────────── Deeper: the 1800-2000 toolkit
+  {
+    id: 'calculation', title: 'How to calculate: candidates, then one line at a time', category: 'Thinking', level: 'advanced',
+    rule: 'List 2-4 candidate moves first, calculate each one separately to a quiet position, and evaluate the END position, not the line.',
+    fixes: ['poor_calculation', 'missed_tactic', 'unsound_sacrifice', 'missed_mate'], practise: ['mate_in_2', 'mate_in_3', 'advantage'],
+    steps: [
+      { say: 'Most players calculate badly not because they can\'t see far, but because they jump between ideas. Method beats talent.' },
+      { say: 'Step 1: candidates. Write down (in your head) every forcing move: checks, captures, threats. Add one or two "natural" moves. Stop at four.' },
+      { say: 'Step 2: one line at a time. For each candidate, find their BEST reply (not the one you hope for), then your best answer, until the position is quiet: no more captures or checks.' },
+      { say: 'Step 3: evaluate the end. Count material, check king safety and look for loose pieces. Compare the end positions of your candidates, then play the best one. If two are close, choose the simpler.' },
+      { say: 'Back-rank check: White to move. One candidate is forcing and ends the game. Calculate it to the end before you play.', fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1',
+        task: { prompt: 'White to move. Find the forcing win.', answers: ['Rd8#'], hint: 'Checks first. Which check leaves the king no squares?', success: 'Rd8# : the king is boxed in by its own pawns. Checks first, every time.' } },
+      { say: 'Practise: in every puzzle, say the whole line before you touch a piece. If you change your mind mid-line, start the line again from the top.' },
+    ],
+    takeaways: ['Candidates first (max 4), forcing moves on top.', 'Assume their best reply.', 'Evaluate the final quiet position, not how exciting the line looks.'],
+  },
+  {
+    id: 'practical', title: 'Practical play: time, nerves and decisions', category: 'Thinking', level: 'advanced',
+    rule: 'Spend your time at the critical moments (tension, transitions, the opponent\'s new idea), play routine moves fast, and never let the clock decide.',
+    fixes: ['moving_fast', 'poor_calculation', 'no_blunder_check'], practise: ['defense'],
+    steps: [
+      { say: 'Critical moments: a capture or check is possible; the opponent made a move you didn\'t expect; the position is about to change type (trade of queens, opening of a file, pawn break). Think hard there.' },
+      { say: 'Routine moments: recaptures, forced replies, a plan you already decided on. Move faster there to bank time.' },
+      { say: 'Budget: roughly 40% of your time for the first 20 moves after the opening. If you are below 1 minute per 10 moves, simplify the position instead of entering complications.' },
+      { say: 'Nerves: after a blunder, the next move is the most dangerous. Sit on your hands, reset, and evaluate the position fresh: it is often still playable.' },
+    ],
+    takeaways: ['Think at critical moments, move fast in routine ones.', 'Low on time? Simplify.', 'After a mistake, take a breath before the next move.'],
+  },
+  {
+    id: 'space', title: 'Space: restrict first, then break', category: 'Strategy', level: 'advanced',
+    rule: 'With more space, avoid trades and restrict the opponent\'s pawn breaks; with less space, trade pieces and play for the freeing break.',
+    fixes: ['passive_play', 'center_control', 'bad_exchange'], practise: ['positional'],
+    steps: [
+      { say: 'Space = squares your pawns control in the enemy half. More space means your pieces can move freely behind the pawns, while theirs get in each other\'s way.' },
+      { say: 'The Maroczy Bind: White\'s pawns on c4 and e4 clamp d5. Black\'s freeing breaks (…d5, …b5) are hard to achieve.', moves: 'e4 c5 Nf3 Nc6 d4 cxd4 Nxd4 g6 c4 Nf6 Nc3 d6 Be2 Nxd4 Qxd4 Bg7', marks: ['d5'] },
+      { say: 'White\'s rules: keep the clamp, avoid trades (Black needs them), and push on the side where the space is (b4-c5 or f4). Black\'s rules: trade minor pieces, prepare …b5 or …f5, and be patient.', arrows: ['b2b4', 'c4c5'] },
+    ],
+    takeaways: ['More space: avoid trades, stop their breaks.', 'Less space: trade, prepare the freeing break.', 'Find the pawn break before you need it.'],
+  },
+  {
+    id: 'pawn-breaks', title: 'Know your pawn break', category: 'Pawn structure', level: 'advanced',
+    rule: 'In every structure there are only one or two pawn breaks that change the position; prepare yours with pieces and stop theirs.',
+    fixes: ['passive_play', 'pawn_structure', 'missed_advantage'], practise: ['positional'],
+    steps: [
+      { say: 'A pawn break is a pawn move that attacks an enemy pawn and opens lines. It is how plans actually happen.' },
+      { say: 'French Advance: Black\'s breaks are …c5 (done) and …f6 (hitting e5). White\'s breaks are f4–f5 and b4 against …c4.', moves: FRENCH_ADV, arrows: ['f7f6:blue', 'b2b4', 'f2f4'] },
+      { say: 'Preparing a break: put pieces behind it (rook on its file, knight supporting the square in front), then push when it gains something. Breaks played too early simply lose a pawn.' },
+    ],
+    takeaways: ['Name the breaks for both sides in every structure.', 'Prepare breaks with pieces; push at the right moment.', 'Stop their break if it is their only plan.'],
+  },
+  {
+    id: 'exchange-sac', title: 'The exchange sacrifice', category: 'Attack & defence', level: 'expert',
+    rule: 'A rook for a minor piece is worth it when it wrecks the enemy king, removes their key piece, or wins a lasting positional bind.',
+    fixes: ['missed_tactic', 'unsound_sacrifice', 'king_safety'], practise: ['advantage'],
+    steps: [
+      { say: 'Material counts are guides, not laws. A rook does nothing on a closed file; a knight on an outpost or a bishop hitting the king can be worth more.' },
+      { say: 'The Dragon\'s signature: …Rxc3. After bxc3, White\'s king on c1 is exposed and the g7 bishop rakes the long diagonal toward a1.', moves: DRAGON + ' Rc8 Bb3 Ne5', arrows: ['c8c3:red', 'g7a1:blue'] },
+      { say: 'Ask three questions before an exchange sacrifice: (1) what does the rook do now? (2) what does their minor piece do? (3) what changes for the kings? If the answers favour you, material is secondary.' },
+    ],
+    takeaways: ['Rooks need open files; minor pieces need squares.', '…Rxc3 to wreck the castled king is a standard pattern.', 'Think long-term: the bind lasts, the material deficit is small.'],
+  },
+  {
+    id: 'opposite-bishops', title: 'Opposite-coloured bishops: attack in the middlegame, draw in the endgame', category: 'Strategy', level: 'advanced',
+    rule: 'With opposite-coloured bishops, the attacker is effectively a piece up (the defender\'s bishop can\'t guard the attacked squares); in the endgame they are very drawish.',
+    fixes: ['conversion', 'holding_draws', 'minor_endgames', 'king_safety'], practise: ['eg_minor'],
+    steps: [
+      { say: 'Each bishop controls squares the other can never touch. In an attack, your bishop hits squares the defender\'s bishop can\'t defend.' },
+      { say: 'Middlegame: if you have the attack, keep queens and rooks on; aim at the colour of your bishop around their king.' },
+      { say: 'Endgame: even two pawns up is often a draw. Defender\'s method: put pawns and the king on the colour your bishop controls, blockading the passed pawns. Attacker: create passed pawns far apart (two weaknesses again).' },
+    ],
+    takeaways: ['Middlegame: attack on your bishop\'s colour.', 'Endgame: drawish; defender blockades on his bishop\'s colour.', 'Winning side needs passed pawns on both wings.'],
+  },
+  {
+    id: 'knight-bishop', title: 'Knight vs bishop', category: 'Pieces', level: 'advanced',
+    rule: 'Bishops love open positions and pawns on both wings; knights love closed centres, outposts and pawns on one side.',
+    fixes: ['bad_exchange', 'minor_endgames', 'piece_placement'], practise: ['eg_minor', 'positional'],
+    steps: [
+      { say: 'Before you trade bishop for knight (or the other way), picture the position 10 moves later: will it open or stay closed?' },
+      { say: 'Fix enemy pawns on the colour of your bishop: they become targets. Put your own pawns on the opposite colour.' },
+      { say: 'Knight advantages: a protected outpost, a blocked centre, all the pawns on one wing (the bishop\'s range doesn\'t matter there). Bishop advantages: passed pawns on both wings, open lines, a race.' },
+      { say: 'The Exchange Ruy Lopez is a deliberate bishop-for-knight trade: White bets on a better pawn structure over the bishop pair.', moves: 'e4 e5 Nf3 Nc6 Bb5 a6 Bxc6 dxc6 O-O f6 d4' },
+    ],
+    takeaways: ['Open board, pawns on both sides: bishop.', 'Closed centre, outposts: knight.', 'Fix their pawns on your bishop\'s colour.'],
+  },
+  {
+    id: 'opposition', title: 'Opposition, key squares and triangulation', category: 'Endgames', level: 'advanced',
+    rule: 'In king-and-pawn endings, the king that reaches the key squares in front of the pawn wins; the opposition decides who gets there, and triangulation wins a tempo when you need it.',
+    fixes: ['opposition', 'king_activity', 'promotion_technique'], practise: ['eg_opposition', 'eg_pawn'], endgame: 'kp-opposition-win',
+    steps: [
+      { say: 'Key squares: for a pawn on e4, if the white king reaches d6, e6 or f6, it wins no matter who moves. The fight is about reaching them.' },
+      { say: 'Opposition: kings facing each other with one square between, and the side NOT to move "has the opposition": the other king must step aside and let you through.', fen: '8/8/4k3/8/4K3/4P3/8/8 b - - 0 1', marks: ['e5', 'd6', 'e6', 'f6'] },
+      { say: 'Triangulation: when you need to "pass", walk your king around a triangle of three squares while their king has only two good squares. You lose a tempo on purpose and they end up to move.' },
+      { say: 'Play it out against Stockfish next: "Winning with the opposition" in the endgame trainer.' },
+    ],
+    takeaways: ['Know the key squares for your pawn.', 'Side NOT to move has the opposition.', 'Triangulate to pass the move.'],
+  },
+  {
+    id: 'lucena-philidor', title: 'Lucena and Philidor: the two rook endings you must know', category: 'Endgames', level: 'advanced',
+    rule: 'Lucena (to win): build a bridge with the rook on the 4th rank. Philidor (to draw): rook on your 3rd rank until the pawn advances, then check from behind.',
+    fixes: ['rook_endgames', 'holding_draws', 'conversion'], practise: ['eg_rook'], endgame: 'lucena',
+    steps: [
+      { say: 'Half of all endgames are rook endings, and two positions explain most of them.' },
+      { say: 'Lucena: your pawn on the 7th, king in front of it, their king cut off. Rook to the 4th rank, king out, then block the checks with the rook ("building a bridge").' },
+      { say: 'Philidor: the defender keeps the rook on the 3rd rank (from his side), stopping the king from coming forward. When the pawn steps to that rank, the rook drops to the back and checks from behind: the king has no shelter.' },
+      { say: 'Play both in the endgame trainer: Lucena to win, Philidor to hold.' },
+    ],
+    takeaways: ['Lucena: rook to the 4th, build a bridge.', 'Philidor: 3rd-rank defence, then checks from behind.'],
+  },
+  {
+    id: 'outside-passer', title: 'The outside passed pawn', category: 'Endgames', level: 'club',
+    rule: 'A passed pawn far from the other pawns is a decoy: the enemy king must run after it, and your king eats the pawns it left behind.',
+    fixes: ['conversion', 'promotion_technique', 'king_activity'], practise: ['eg_pawn'], endgame: 'outside-passer',
+    steps: [
+      { say: 'In pawn endings, an outside passed pawn is usually decisive, even with equal material.' },
+      { say: 'Method: push the outside passer to drag the enemy king away, then march your own king to the other wing and win the pawns there.' },
+      { say: 'This is also why, when you are ahead, trading into a pawn ending with an outside passer is often the cleanest win.' },
+    ],
+    takeaways: ['Outside passer = decoy.', 'Trade into pawn endings where you have one.'],
+  },
 ];
 
 export const PRINCIPLE_BY_ID = new Map(PRINCIPLES.map((p) => [p.id, p]));

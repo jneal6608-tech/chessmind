@@ -161,7 +161,8 @@ export function compareMoves(fen: string, x: Candidate, y: Candidate): Compariso
     }
   }
 
-  const evalA = formatScore(me === 'w' ? A.cp : -A.cp), evalB = formatScore(me === 'w' ? B.cp : -B.cp);
+  // Scores from YOUR side (the side to move), so "you are losing" never shows a plus sign.
+  const evalA = formatScore(A.cp), evalB = formatScore(B.cp);
   const summary = equal
     ? `${A.san} and ${B.san} are about equally good (${evalA} vs ${evalB}).`
     : `${A.san} is better than ${B.san}: with ${A.san} ${feel(A.cp)} (${evalA}), with ${B.san} ${feel(B.cp)} (${evalB})${Math.abs(pawns) >= 0.3 && Math.abs(A.cp) < 9000 && Math.abs(B.cp) < 9000 ? `, a difference of about ${Math.abs(pawns).toFixed(1)} pawn${Math.abs(pawns) >= 1.5 ? 's' : ''}` : ''}.`;

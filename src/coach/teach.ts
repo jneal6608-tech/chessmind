@@ -340,6 +340,13 @@ export async function explainThreat(engine: UciEngine, fen: string, level: Coach
   }
   if (!pv.length) return null;
   const st = storyFor(nm, pv, me, level);
+  // Only the part of the line where the threat is carried out (until the material settles).
+  {
+    const plies = settle(nm, pv).plies, c2 = new Chess(nm);
+    let lastCap = 0;
+    for (let i = 0; i < plies; i++) { const m = tryMove(c2, pv[i]); if (!m) break; if (m.captured || c2.isCheckmate()) lastCap = i; }
+    st.steps = st.steps.slice(0, lastCap + 1);
+  }
   const san = new Chess(nm).moves({ verbose: true }).find((x) => x.lan === pv[0])?.san ?? pv[0];
   const first = describeMove(nm, pv[0], me).replace(/^They /, '').replace(/\.$/, '');
   const summary = st.result.includes('checkmated')

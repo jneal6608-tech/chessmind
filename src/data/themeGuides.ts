@@ -102,7 +102,7 @@ export const THEME_GUIDE: Record<string, ThemeGuide> = {
 export function coachIntro(theme: string, goal: string, level: CoachLevel): string {
   const g = THEME_GUIDE[theme];
   if (!g) return goal === 'hold' ? 'They have a threat. Find it first, then the move that stops it.' : 'Checks, captures and threats first: for you and for them.';
-  if (level === 'beginner') return `${g.what} ${g.ask[0]}`;
-  if (level === 'intermediate') return `${g.what} Tip: ${g.spot}`;
+  if (level === 'beginner') return `Ask yourself: ${g.ask[0]}`;
+  if (level === 'intermediate') return `Tip: ${g.spot}`;
   return `${g.spot} ${g.deeper ?? g.ask[g.ask.length - 1]}`;
 }
