@@ -90,3 +90,13 @@ describe('principles: every lesson position and answer is legal', () => {
   }
   it('ids are unique', () => expect(new Set(PRINCIPLES.map((p) => p.id)).size).toBe(PRINCIPLES.length));
 });
+
+import { PROFILES, LINE_ABOUT } from '../src/data/openingInfo';
+describe('openings: every course is profiled and every line explained', () => {
+  it('profiles and line descriptions', () => {
+    for (const c of COURSES) {
+      expect(PROFILES[c.id], `profile for ${c.id}`).toBeTruthy();
+      for (const l of c.lines) expect(LINE_ABOUT[l.id], `about for ${l.id}`).toBeTruthy();
+    }
+  });
+});
