@@ -6,36 +6,37 @@ import { Explained } from './Explained';
 
 export type Mood = 'neutral' | 'happy' | 'thinking' | 'concerned' | 'cool' | 'excited';
 
-// Haircut (from the front reference): loose open coils with volume on top,
-// falling onto the forehead and down the sides to the top of the ears; a low
-// taper at the sideburns that fades to skin in front of the ears.
+// Haircut: a temple taper with a crisp line-up, and a rounded, organic mass
+// of coils on top that bulges out over the faded sides and tucks in just above
+// the ears (no straight edges: built from overlapping clumps).
 interface Curl { x: number; y: number; r: number; a: number; tip: boolean }
-const inHair = (x: number, y: number) => {
-  const dx = (x - 100) / 52, dy = (y - 50) / 30;
-  if (dx * dx + dy * dy <= 1) {
-    // fringe: uneven curls down to ~70 in the middle, the temples a bit higher
-    const fringe = 70 - Math.abs(x - 100) * 0.08 + Math.sin(x / 4) * 2;
-    return y <= fringe || Math.abs(x - 100) > 38;
-  }
-  // sides: curls falling to the top of the ears
-  return y >= 50 && y <= 96 - Math.abs(y - 70) * 0.1 && ((x >= 50 && x <= 63) || (x >= 137 && x <= 150));
+const DOME = { cx: 100, cy: 43, rx: 51, ry: 30 };
+const inDome = (x: number, y: number) => {
+  const dx = (x - DOME.cx) / DOME.rx, dy = (y - DOME.cy) / DOME.ry;
+  if (y > 68) return false;
+  return dx * dx + dy * dy <= 0.92;
 };
 const CURLS: Curl[] = (() => {
-  let s = 13;
+  let s = 17;
   const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   const out: Curl[] = [];
-  for (let i = 0; i < 2400 && out.length < 170; i++) {
-    const x = 46 + rnd() * 108, y = 18 + rnd() * 80;
-    if (!inHair(x, y)) continue;
-    out.push({ x, y, r: 3 + rnd() * 2.6, a: rnd() * 360, tip: y < 52 && rnd() < 0.6 });
+  for (let i = 0; i < 3000 && out.length < 190; i++) {
+    const x = 46 + rnd() * 108, y = 12 + rnd() * 58;
+    if (!inDome(x, y)) continue;
+    out.push({ x, y, r: 2.8 + rnd() * 2.2, a: rnd() * 360, tip: y < 54 && rnd() < 0.6 });
   }
   return out.sort((p, q) => q.y - p.y);
 })();
-// Uneven outline of the hair (top and sides).
-const RIM: [number, number, number][] = [
-  ...Array.from({ length: 18 }, (_, i) => { const t = Math.PI * (1.0 + (i / 17) * 1.0); return [100 + Math.cos(t) * 52, 50 + Math.sin(t) * 30, 5 + (i % 3) * 1.4] as [number, number, number]; }),
-  [50, 62, 6], [49, 74, 5.5], [51, 86, 5], [150, 62, 6], [151, 74, 5.5], [149, 86, 5],
-];
+// Clumps that give the rounded, uneven outline (and a soft, curly lower edge over the forehead).
+const RIM: [number, number, number][] = (() => {
+  const out: [number, number, number][] = [];
+  for (let i = 0; i <= 22; i++) {
+    const t = Math.PI * (0.9 + (i / 22) * 1.2);
+    out.push([DOME.cx + Math.cos(t) * (DOME.rx - 3), DOME.cy + Math.sin(t) * (DOME.ry - 3), 7.5 + ((i * 7) % 5) * 0.9]);
+  }
+  for (const [x, y, r] of [[68, 60, 5], [76, 64, 5.5], [85, 66, 4.5], [94, 69, 5.5], [103, 66, 4.5], [111, 69, 5], [120, 65, 5], [129, 61, 4.5]] as [number, number, number][]) out.push([x, y, r]);
+  return out;
+})();
 
 export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { mood?: Mood; size?: number; className?: string }) {
   const id = useId().replace(/:/g, '');
@@ -67,7 +68,7 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         <radialGradient id={u('iris')} cx="40%" cy="40%" r="60%"><stop offset="0" stopColor="#6b4325" /><stop offset="1" stopColor="#24150c" /></radialGradient>
         <linearGradient id={u('lens')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#3a2a24" /><stop offset="0.55" stopColor="#120c0a" /><stop offset="1" stopColor="#2a1d18" /></linearGradient>
         <linearGradient id={u('lip')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#6e3a2e" /><stop offset="1" stopColor="#8f5546" /></linearGradient>
-        <linearGradient id={u('fade')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1a120d" stopOpacity="0.92" /><stop offset="0.45" stopColor="#1a120d" stopOpacity="0.5" /><stop offset="0.8" stopColor="#1a120d" stopOpacity="0.12" /><stop offset="1" stopColor="#1a120d" stopOpacity="0" /></linearGradient>
+        <linearGradient id={u('fade')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1a120d" stopOpacity="0.85" /><stop offset="0.3" stopColor="#1a120d" stopOpacity="0.45" /><stop offset="0.65" stopColor="#1a120d" stopOpacity="0.15" /><stop offset="1" stopColor="#1a120d" stopOpacity="0" /></linearGradient>
         <clipPath id={u('clip')}><circle cx="100" cy="100" r="98" /></clipPath>
       </defs>
       <circle cx="100" cy="100" r="98" fill={`url(#${u('bg')})`} />
@@ -99,13 +100,11 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         <ellipse cx="122" cy="114" rx="9" ry="5" fill="#b07656" opacity="0.25" />
         {/* forehead highlight */}
         <ellipse cx="98" cy="79" rx="16" ry="5" fill="#b88262" opacity="0.25" />
-        {/* low taper: short at the sideburns, fading to skin in front of the ears */}
-        <path d="M56 88 Q55 98 58 112 L63 112 Q62 100 63 90 Z" fill={`url(#${u('fade')})`} />
-        <path d="M144 88 Q145 98 142 112 L137 112 Q138 100 137 90 Z" fill={`url(#${u('fade')})`} />
-        {/* hair mass: top and the sides down to the ears */}
-        <ellipse cx="100" cy="50" rx="50" ry="28" fill="#1a120d" />
-        <path d="M50 52 Q46 72 52 96 L62 92 Q60 72 66 60 Z M150 52 Q154 72 148 96 L138 92 Q140 72 134 60 Z" fill="#1a120d" />
-        <path d="M62 62 Q80 54 100 55 Q120 54 138 62 L136 70 Q120 66 100 67 Q80 66 64 70 Z" fill="#1a120d" />
+        {/* temple taper: short hair at the temples fading to skin toward the ears, crisp line-up at the corner */}
+        <path d="M59 58 L66 61 Q61 72 61 88 Q61 98 63 106 L58 106 Q55 92 55.5 76 Q56.5 64 59 58 Z" fill={`url(#${u('fade')})`} />
+        <path d="M141 58 L134 61 Q139 72 139 88 Q139 98 137 106 L142 106 Q145 92 144.5 76 Q143.5 64 141 58 Z" fill={`url(#${u('fade')})`} />
+        {/* rounded coil mass on top */}
+        <ellipse cx={DOME.cx} cy={DOME.cy} rx={DOME.rx - 2} ry={DOME.ry - 2} fill="#1a120d" />
         {RIM.map(([x, y, r], i) => <circle key={'r' + i} cx={x} cy={y} r={r} fill="#1a120d" />)}
         {CURLS.map((c, i) => (
           <g key={i} transform={`rotate(${c.a} ${c.x} ${c.y})`}>
@@ -114,7 +113,7 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
           </g>
         ))}
         {/* loose coils hanging onto the forehead */}
-        {[[78, 71, 3.6, 20], [92, 73, 4.2, -30], [104, 72, 3.4, 60], [119, 72, 3.8, -10]].map(([x, y, r, a], i) => (
+        {[[81, 69, 3.2, 20], [97, 73, 3.6, -30], [116, 70, 3.2, 50]].map(([x, y, r, a], i) => (
           <path key={'h' + i} transform={`rotate(${a} ${x} ${y})`} d={`M${x - r} ${y - 3} q${r * 0.2} ${r * 1.6} ${r} ${r * 1.4} q${r * 0.9} ${-r * 0.3} ${r * 0.4} ${-r}`} fill="none" stroke="#1a120d" strokeWidth="2.2" strokeLinecap="round" />
         ))}
         {/* brows */}
