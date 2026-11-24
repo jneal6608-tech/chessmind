@@ -6,48 +6,45 @@ import { Explained } from './Explained';
 
 export type Mood = 'neutral' | 'happy' | 'thinking' | 'concerned' | 'cool' | 'excited';
 
-// Haircut: a temple taper with a crisp line-up, and a rounded, organic mass
-// of coils on top that bulges out over the faded sides and tucks in just above
-// the ears (no straight edges: built from overlapping clumps).
-interface Curl { x: number; y: number; r: number; a: number; tip: boolean }
-const DOME = { cx: 100, cy: 43, rx: 51, ry: 30 };
-const inDome = (x: number, y: number) => {
-  const dx = (x - DOME.cx) / DOME.rx, dy = (y - DOME.cy) / DOME.ry;
-  if (y > 68) return false;
-  return dx * dx + dy * dy <= 0.92;
-};
-const CURLS: Curl[] = (() => {
-  let s = 17;
+// Haircut: defined coils (individual ringlets, not an afro texture) in a
+// rounded shape on top, coming down the sides behind a temple taper to the top
+// of the ears, with a few longer coils hanging onto the forehead.
+interface Coil { x: number; y: number; r: number; tilt: number; loops: number; tip: boolean }
+function coilField(seed: number, step: number, x0: number, x1: number, y0: number, y1: number, accept: (x: number, y: number) => boolean, make: (x: number, y: number, rnd: () => number) => Omit<Coil, 'x' | 'y'>): Coil[] {
+  let s = seed;
   const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  const out: Curl[] = [];
-  for (let i = 0; i < 3000 && out.length < 190; i++) {
-    const x = 46 + rnd() * 108, y = 12 + rnd() * 58;
-    if (!inDome(x, y)) continue;
-    out.push({ x, y, r: 2.8 + rnd() * 2.2, a: rnd() * 360, tip: y < 54 && rnd() < 0.6 });
-  }
-  return out.sort((p, q) => q.y - p.y);
-})();
-// Coils on the sides of the head (behind the tapered temples), down to the top of the ears.
-const SIDE: Curl[] = (() => {
-  let s = 29;
-  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  const out: Curl[] = [];
-  for (const side of [-1, 1]) for (let i = 0; i < 34; i++) {
-    const y = 50 + rnd() * 44, x = 100 + side * (44 + rnd() * 9 - Math.max(0, y - 84) * 0.5);
-    out.push({ x, y, r: 2.8 + rnd() * 2, a: rnd() * 360, tip: rnd() < 0.3 });
+  const out: Coil[] = [];
+  let row = 0;
+  for (let y = y0; y <= y1; y += step * 0.8, row++) {
+    for (let x = x0 + (row % 2) * step / 2; x <= x1; x += step) {
+      const jx = x + (rnd() - 0.5) * step * 0.45, jy = y + (rnd() - 0.5) * step * 0.4;
+      if (!accept(jx, jy)) continue;
+      out.push({ x: jx, y: jy, ...make(jx, jy, rnd) });
+    }
   }
   return out;
-})();
-// Clumps that give the rounded, uneven outline (and a soft, curly lower edge over the forehead).
-const RIM: [number, number, number][] = (() => {
-  const out: [number, number, number][] = [];
-  for (let i = 0; i <= 22; i++) {
-    const t = Math.PI * (0.9 + (i / 22) * 1.2);
-    out.push([DOME.cx + Math.cos(t) * (DOME.rx - 3), DOME.cy + Math.sin(t) * (DOME.ry - 3), 7.5 + ((i * 7) % 5) * 0.9]);
+}
+const inTop = (x: number, y: number) => { const dx = (x - 100) / 50, dy = (y - 44) / 30; return dx * dx + dy * dy <= 1 && y <= 64; };
+const TOP = coilField(17, 9.5, 50, 150, 14, 64, inTop, (_x, y, r) => ({ r: 4.3 + r() * 1.4, tilt: (r() - 0.5) * 50, loops: y > 52 ? 3 : 2, tip: y < 50 || r() < 0.4 }));
+const FRINGE: Coil[] = [[72, 63], [81, 66], [90, 67], [99, 68], [108, 67], [117, 66], [126, 63]].map(([x, y], i) => ({ x, y, r: 3.6 + (i % 2) * 0.5, tilt: ((i * 37) % 30) - 15, loops: 3, tip: i % 3 === 0 }));
+const SIDES = coilField(29, 8, 42, 158, 50, 90, (x, y) => (x < 59 || x > 141) && Math.abs(x - 100) < 56 - Math.max(0, y - 80) * 0.6, (_x, _y, r) => ({ r: 3.7 + r() * 0.9, tilt: (r() - 0.5) * 30, loops: 2, tip: r() < 0.25 }));
+const byY = (p: Coil, q: Coil) => p.y - q.y;
+TOP.sort(byY); SIDES.sort(byY);
+
+/** One ringlet seen from the front: a small spring of stacked loops with a highlight on each. */
+function Ringlet({ c }: { c: Coil }) {
+  const loops = [];
+  for (let k = 0; k < c.loops; k++) {
+    const cy = c.y + k * c.r * 1.0, rx = c.r * (1 - k * 0.08), ry = c.r * 0.68;
+    loops.push(
+      <g key={k}>
+        <ellipse cx={c.x} cy={cy} rx={rx} ry={ry} fill="#20150e" stroke="#2c1d13" strokeWidth="2.4" />
+        <path d={`M${c.x - rx * 0.75} ${cy - ry * 0.25} A${rx} ${ry} 0 0 1 ${c.x + rx * 0.35} ${cy - ry * 0.92}`} fill="none" stroke={c.tip ? '#8e643f' : '#4e3624'} strokeWidth="1.2" strokeLinecap="round" />
+      </g>,
+    );
   }
-  for (const [x, y, r] of [[68, 60, 5], [76, 64, 5.5], [85, 66, 4.5], [94, 69, 5.5], [103, 66, 4.5], [111, 69, 5], [120, 65, 5], [129, 61, 4.5]] as [number, number, number][]) out.push([x, y, r]);
-  return out;
-})();
+  return <g transform={`rotate(${c.tilt} ${c.x} ${c.y})`}>{loops}</g>;
+}
 
 export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { mood?: Mood; size?: number; className?: string }) {
   const id = useId().replace(/:/g, '');
@@ -96,15 +93,8 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         <path d="M80 160 Q100 180 120 160" stroke="#c9ced4" strokeWidth="2.2" fill="none" strokeDasharray="2.6 1.4" />
         <path d="M80 160 Q100 180 120 160" stroke="#ffffff" strokeWidth="0.8" fill="none" strokeDasharray="1 3" opacity="0.8" />
         {/* side hair: coils down the sides of the head behind the temples, to the top of the ears */}
-        <path d="M60 48 Q44 56 45 74 Q46 88 54 97 Q60 92 62 80 Z" fill="#1a120d" />
-        <path d="M140 48 Q156 56 155 74 Q154 88 146 97 Q140 92 138 80 Z" fill="#1a120d" />
-        {[[48, 60, 6], [46, 72, 6], [48, 84, 5.5], [53, 93, 4.5], [152, 60, 6], [154, 72, 6], [152, 84, 5.5], [147, 93, 4.5]].map(([x, y, r], i) => <circle key={'sc' + i} cx={x} cy={y} r={r} fill="#1a120d" />)}
-        {SIDE.map((c, i) => (
-          <g key={'s' + i} transform={`rotate(${c.a} ${c.x} ${c.y})`}>
-            <path d={`M${c.x - c.r} ${c.y} a${c.r} ${c.r} 0 1 1 ${c.r * 1.7} ${c.r * 0.7} a${c.r * 0.6} ${c.r * 0.6} 0 1 1 ${-c.r * 0.9} ${-c.r * 0.6}`} fill="none" stroke="#2e2018" strokeWidth="1.9" strokeLinecap="round" />
-            <path d={`M${c.x - c.r * 0.5} ${c.y - c.r * 0.8} a${c.r * 0.8} ${c.r * 0.8} 0 0 1 ${c.r * 1.1} ${c.r * 0.15}`} fill="none" stroke={c.tip ? '#9c7046' : '#4a3424'} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
-          </g>
-        ))}
+        <path d="M60 50 Q47 58 48 74 Q49 86 55 94 Q60 90 62 80 Z M140 50 Q153 58 152 74 Q151 86 145 94 Q140 90 138 80 Z" fill="#180f0a" />
+        {SIDES.map((c, i) => <Ringlet key={'s' + i} c={c} />)}
         {/* ears */}
         <path d="M58 96 Q48 94 48 106 Q49 120 60 124 Z" fill="#7c4a2f" />
         <path d="M142 96 Q152 94 152 106 Q151 120 140 124 Z" fill="#7c4a2f" />
@@ -124,20 +114,11 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         {/* temple taper: short hair at the temples fading to skin toward the ears, crisp line-up at the corner */}
         <path d="M59 58 L66 61 Q61 72 61 88 Q61 98 63 106 L58 106 Q55 92 55.5 76 Q56.5 64 59 58 Z" fill={`url(#${u('fade')})`} />
         <path d="M141 58 L134 61 Q139 72 139 88 Q139 98 137 106 L142 106 Q145 92 144.5 76 Q143.5 64 141 58 Z" fill={`url(#${u('fade')})`} />
-        {/* rounded coil mass on top */}
-        <ellipse cx={DOME.cx} cy={DOME.cy} rx={DOME.rx - 2} ry={DOME.ry - 2} fill="#1a120d" />
-        {RIM.map(([x, y, r], i) => <circle key={'r' + i} cx={x} cy={y} r={r} fill="#1a120d" />)}
-        {CURLS.map((c, i) => (
-          <g key={i} transform={`rotate(${c.a} ${c.x} ${c.y})`}>
-            <path d={`M${c.x - c.r} ${c.y} a${c.r} ${c.r} 0 1 1 ${c.r * 1.7} ${c.r * 0.7} a${c.r * 0.6} ${c.r * 0.6} 0 1 1 ${-c.r * 0.9} ${-c.r * 0.6}`} fill="none" stroke="#2e2018" strokeWidth="2" strokeLinecap="round" />
-            <path d={`M${c.x - c.r * 0.5} ${c.y - c.r * 0.8} a${c.r * 0.8} ${c.r * 0.8} 0 0 1 ${c.r * 1.1} ${c.r * 0.15}`} fill="none" stroke={c.tip ? '#9c7046' : '#4a3424'} strokeWidth="1.3" strokeLinecap="round" opacity={c.tip ? 0.9 : 0.75} />
-          </g>
-        ))}
-        {/* loose coils hanging onto the forehead */}
-        {[[81, 69, 3.2, 20], [97, 73, 3.6, -30], [116, 70, 3.2, 50]].map(([x, y, r, a], i) => (
-          <path key={'h' + i} transform={`rotate(${a} ${x} ${y})`} d={`M${x - r} ${y - 3} q${r * 0.2} ${r * 1.6} ${r} ${r * 1.4} q${r * 0.9} ${-r * 0.3} ${r * 0.4} ${-r}`} fill="none" stroke="#1a120d" strokeWidth="2.2" strokeLinecap="round" />
-        ))}
-        {/* brows */}
+        {/* rounded shape of defined coils on top */}
+        <ellipse cx="100" cy="45" rx="46" ry="25" fill="#180f0a" />
+        {TOP.map((c, i) => <Ringlet key={'t' + i} c={c} />)}
+        {FRINGE.map((c, i) => <Ringlet key={'f' + i} c={c} />)}
+                {/* brows */}
         <g transform={`translate(0 ${browY})`}>
           <path d={browL} fill="#1d1410" />
           <path d={browR} fill="#1d1410" />
