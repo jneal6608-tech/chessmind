@@ -70,6 +70,7 @@ export function CoachPage({ fenParam }: { fenParam?: string }) {
     try {
       const v = await tryIdea(coachEngine, before, u, level);
       const lines = [v.headline, v.reason, '', 'What happens next:', ...v.story.map((st, i) => `${i + 1}. ${st.text}`), `Result: ${v.result}.`];
+      if (v.compare && !v.compare.equal) lines.push('', `Why ${v.compare.better.san} is better:`, ...v.compare.reasons.map((r) => `• ${r}`));
       if (v.better) lines.push('', `Better was ${v.better.san}:`, ...v.better.story.slice(0, 4).map((st, i) => `${i + 1}. ${st.text}`), `Result: ${v.better.result}.`);
       setMsgs((m) => [...m, { role: 'assistant', text: lines.join('\n'), source: 'Move check (Stockfish)' }]);
     } catch { /* position changed */ } finally { setBusy(false); }

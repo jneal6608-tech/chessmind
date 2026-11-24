@@ -7,6 +7,7 @@ import type { Exercise } from '../training/types';
 import { BANK } from '../training/bank';
 import { buildProfile, type Profile } from '../analysis/profile';
 import { estimateStrength, type Strength } from '../analysis/strength';
+import { getLessons, type LessonProgress } from '../store/lessons';
 
 export interface AppData {
   games: GameRecord[];
@@ -19,13 +20,14 @@ export interface AppData {
   settings: Settings;
   profile: Profile;
   strength: Strength;
+  lessons: LessonProgress;
 }
 
 export async function loadAll(): Promise<AppData> {
-  const [games, attempts, cards, own, ratings, repertoire, settings] = await Promise.all([G.all(), A.all(), S.all(), E.all(), R.all(), REP.all(), getSettings()]);
+  const [games, attempts, cards, own, ratings, repertoire, settings, lessons] = await Promise.all([G.all(), A.all(), S.all(), E.all(), R.all(), REP.all(), getSettings(), getLessons()]);
   return {
     games, attempts, cards: new Map(cards.map((c) => [c.exerciseId, c])), exercises: [...own, ...BANK], ownExercises: own,
-    ratings, repertoire, settings, profile: buildProfile(games, attempts), strength: estimateStrength(games, settings.startingElo),
+    ratings, repertoire, settings, profile: buildProfile(games, attempts), strength: estimateStrength(games, settings.startingElo), lessons,
   };
 }
 

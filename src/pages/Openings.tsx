@@ -14,6 +14,7 @@ import { lookupOpening, openingFamily } from '../openings/identify';
 import { resultFor } from '../ui/common';
 import { playSound } from '../services/sound';
 import { go } from '../services/router';
+import { PROFILES, LINE_ABOUT, CHARACTER_TEXT, THEORY_TEXT, APPROACH_TEXT, type OpeningProfile } from '../data/openingInfo';
 
 interface PLine { id: string; name: string; color: 'w' | 'b'; uci: string[]; san: string[]; notes: Record<number, string>; trap?: { badPly: number; text: string }; courseId?: string; custom?: boolean }
 
@@ -57,6 +58,10 @@ function OpeningsHome({ data }: { data: AppData }) {
   const [builder, setBuilder] = useState(false);
   const recs = recommendCourses(data);
   const perf = useMemo(() => openingPerformance(data), [data]);
+  const [fColor, setFColor] = useState<'all' | 'w' | 'b'>('all');
+  const [fChar, setFChar] = useState<string>('all');
+  const [fTheory, setFTheory] = useState<string>('all');
+  const shown = COURSES.filter((c) => (fColor === 'all' || c.color === fColor) && (fChar === 'all' || PROFILES[c.id]?.character === fChar) && (fTheory === 'all' || PROFILES[c.id]?.theory === fTheory));
   return (
     <Page title="Openings" subtitle="Learn a small repertoire by its ideas, practise it until it is automatic, and see how each opening actually works out in your games."
       actions={<button className="btn" onClick={() => setBuilder(true)}>+ Add a line</button>}>
@@ -72,15 +77,24 @@ function OpeningsHome({ data }: { data: AppData }) {
                 </a>); })}
             </div>
           </Card>
+          <div className="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="label mr-1">Filter</span>
+            {([['all', 'Both colours'], ['w', 'White'], ['b', 'Black']] as const).map(([v, l]) => <button key={v} onClick={() => setFColor(v)} className={`chip !py-1 ${fColor === v ? 'text-brass-300 border-brass-600' : ''}`}>{l}</button>)}
+            <span className="mx-1 text-ink-600">|</span>
+            {['all', 'sharp', 'balanced', 'positional'].map((v) => <button key={v} onClick={() => setFChar(v)} className={`chip !py-1 ${fChar === v ? 'text-brass-300 border-brass-600' : ''}`}>{v === 'all' ? 'Any style' : v}</button>)}
+            <span className="mx-1 text-ink-600">|</span>
+            {['all', 'light', 'medium', 'heavy'].map((v) => <button key={v} onClick={() => setFTheory(v)} className={`chip !py-1 ${fTheory === v ? 'text-brass-300 border-brass-600' : ''}`}>{v === 'all' ? 'Any theory' : `${v} theory`}</button>)}
+          </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {COURSES.map((c) => {
+            {shown.map((c) => {
               const lines = c.lines.map((l) => l.id);
               const practised = lines.filter((id) => data.cards.get(`line:${id}`)?.lastSuccess).length;
               return (
                 <a key={c.id} href={`#/openings/course/${c.id}`} className="card p-4 hover:border-ink-500 transition-colors">
                   <div className="flex items-center justify-between"><div className="font-semibold text-lg h-display">{c.name}</div><span className="chip">{c.color === 'w' ? 'White' : 'Black'} · vs {c.vs}</span></div>
                   <p className="mt-2 text-sm text-ink-300">{c.summary}</p>
-                  <div className="mt-3 flex flex-wrap gap-1">{c.style.map((s) => <span key={s} className="chip !text-[10px]">{s}</span>)}</div>
+                  {PROFILES[c.id] && <ProfileBadges p={PROFILES[c.id]} />}
+                  <div className="mt-2 flex flex-wrap gap-1">{c.style.map((s) => <span key={s} className="chip !text-[10px]">{s}</span>)}</div>
                   <div className="mt-3 text-xs text-ink-400">{practised}/{lines.length} lines mastered</div>
                 </a>
               );
@@ -143,6 +157,7 @@ function CourseView({ data, id }: { data: AppData; id: string }) {
           </div>
         </div>
         <div className="space-y-3">
+          {PROFILES[c.id] && <AboutCard p={PROFILES[c.id]} />}
           <Card title="Key ideas"><ul className="list-disc pl-5 space-y-1 text-sm text-ink-200">{c.ideas.map((x) => <li key={x}><Explained text={x} /></li>)}</ul>
             <div className="label mt-3 mb-1">Typical plans</div><ul className="list-disc pl-5 space-y-1 text-sm text-ink-300">{c.plans.map((x) => <li key={x}><Explained text={x} /></li>)}</ul></Card>
           <Card title="Lines">
@@ -159,6 +174,8 @@ function CourseView({ data, id }: { data: AppData; id: string }) {
             <div className="text-xs font-mono text-ink-300 leading-relaxed">
               {line.san.map((s, i) => <button key={i} onClick={() => setPly(i)} className={`mr-1 rounded px-0.5 ${i === ply ? 'bg-brass-500/30 text-brass-300' : 'hover:text-ink-100'} ${line.trap?.badPly === i ? 'underline decoration-miss' : ''}`}>{i % 2 === 0 ? `${i / 2 + 1}.` : ''}{s}</button>)}
             </div>
+            {LINE_ABOUT[line.id] && <p className="mt-2 text-sm text-ink-300"><b className="text-ink-100">{line.name}:</b> <Explained text={LINE_ABOUT[line.id]} /></p>}
+            {nameHere && ply >= 0 && <p className="mt-1 text-xs text-brass-300">Position: {nameHere}</p>}
             <div className="mt-3 min-h-[3rem] text-sm text-ink-200">{note ? <Explained text={note} /> : (ply < 0 ? 'Step through the line with ▶. Each key move has a short note.' : nameHere ? <span className="text-ink-400">{nameHere}</span> : '')}</div>
             {line.trap && ply >= line.trap.badPly && <p className="mt-2 text-sm text-miss"><Explained text={line.trap.text} /></p>}
             <div className="mt-3 flex flex-wrap gap-2">
@@ -308,5 +325,31 @@ function PerformanceTable({ perf, data }: { perf: PerfRow[]; data: AppData }) {
           </button>); })}</div> : <p className="text-sm text-ink-400">No serious opening mistakes found yet.</p>}
       </Card>
     </div>
+  );
+}
+
+const CHAR_TONE: Record<string, string> = { sharp: 'text-blunder border-blunder/50', balanced: 'text-brass-300 border-brass-600', positional: 'text-good border-good/50' };
+function ProfileBadges({ p }: { p: OpeningProfile }) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-1">
+      <span className={`chip !text-[10px] ${CHAR_TONE[p.character]}`} title={CHARACTER_TEXT[p.character]}>{p.character}</span>
+      <span className="chip !text-[10px]" title={THEORY_TEXT[p.theory]}>{p.theory} theory</span>
+      <span className="chip !text-[10px]" title={APPROACH_TEXT[p.approach]}>{p.approach}</span>
+    </div>
+  );
+}
+function AboutCard({ p }: { p: OpeningProfile }) {
+  return (
+    <Card title="What kind of opening is this?">
+      <ProfileBadges p={p} />
+      <ul className="mt-2 space-y-1 text-sm text-ink-300">
+        <li>{CHARACTER_TEXT[p.character]}</li>
+        <li>{THEORY_TEXT[p.theory]}</li>
+        <li>{APPROACH_TEXT[p.approach]}</li>
+      </ul>
+      <div className="mt-3 text-sm"><span className="label">Typical middlegame</span><p className="text-ink-200"><Explained text={p.structure} /></p></div>
+      <div className="mt-2 text-sm"><span className="label">Who it suits</span><p className="text-ink-200">{p.suits}</p></div>
+      <div className="mt-2 text-sm"><span className="label">Know this first</span><p className="text-ink-200"><Explained text={p.knowFirst} /></p></div>
+    </Card>
   );
 }

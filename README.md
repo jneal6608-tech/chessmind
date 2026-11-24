@@ -56,6 +56,34 @@ headers (COOP/COEP) are needed.
   normally; tap one to see a short definition.
 - **Board labels.** Files a–h and ranks 1–8 are printed around the board.
 
+## Coaching built around you
+
+- **Your coach.** A 2D illustrated coach guides every exercise and lesson; the mood
+  changes with how you are doing (`src/ui/Coach.tsx`).
+- **Road to 2000** (dashboard). Your games measured against a ~2000 player: blunders and
+  mistakes per game, accuracy per phase, conversion of winning positions, opening
+  health, fast-move errors, colour split and tactics rating. The biggest gaps become
+  ranked findings with the lesson and drill that fix them, plus a 7-day plan
+  (`src/analysis/diagnosis.ts`).
+- **Threats explained.** In "spot the threat" exercises, "What are they threatening?"
+  shows the threat on the board and tells it move by move; after every exercise the
+  coach explains the threat and the lesson behind the pattern (`src/data/themeGuides.ts`).
+- **Why the engine move is better, in words.** Outposts, open files, bad bishops,
+  prophylaxis (stopping their threat), new threats, pawn breaks, space and the engine's
+  plan (`src/coach/positional.ts`). Every comparison opens a board where you play both
+  sides to test the follow-ups.
+- **Principles** (`#/principles`). 32 guided lessons (thinking, openings, pawn
+  structures, pieces, strategy, attack and defence, endgames) at club, advanced and
+  expert level, with engine-checked "your move" challenges. Lessons that fix your own
+  weaknesses are recommended first (`src/data/principles.ts`). Every lesson has at least
+  one board challenge, and a test checks each answer against Stockfish. Progress and
+  first-try results are stored in the app database, so they are part of the Settings
+  backup and merge when you import it on another device (`src/store/lessons.ts`).
+- **Openings with a profile.** Every opening is labelled sharp / balanced / positional,
+  light / medium / heavy theory and attacking / counterattacking / solid / defensive,
+  with its typical middlegame, who it suits and what to know first; every line is
+  named and explained (`src/data/openingInfo.ts`). 34 courses.
+
 ## Analysis tools
 
 - **Every move rated.** Each move in a reviewed game gets a label: Brilliant (a sound

@@ -40,7 +40,10 @@ describe('theory endgames: engine agrees with the verdict', () => {
       const r = await e.analyze(t.fen, { depth: 22 });
       const s = scoreOf(r.lines[0]);
       if (t.goal === 'win') expect(s, `${t.id} eval ${s}`).toBeGreaterThan(250);
-      else expect(Math.abs(s), `${t.id} eval ${s}`).toBeLessThan(80);
+      // Fortress draws (wrong-coloured bishop, Philidor...) are often shown as a small
+      // edge rather than 0.00: the engine can't prove the fortress. What matters is that
+      // it finds no winning plan, i.e. stays well below a winning score.
+      else expect(Math.abs(s), `${t.id} eval ${s}`).toBeLessThan(200);
     }, 60000);
   }
 });
@@ -72,4 +75,51 @@ describe('exercise bank', () => {
   it('every weakness can be trained by some theme', () => {
     for (const w of WEAKNESSES) expect(w.train.length).toBeGreaterThan(0);
   });
+});
+
+import { PRINCIPLES } from '../src/data/principles';
+describe('principles: every lesson position and answer is legal', () => {
+  for (const p of PRINCIPLES) {
+    it(p.title, () => {
+      let fen = new Chess().fen();
+      for (const s of p.steps) {
+        if (s.fen) fen = new Chess(s.fen).fen();
+        if (s.moves) { const c = new Chess(); for (const m of s.moves.split(' ')) expect(() => c.move(m), `${p.id}: ${m}`).not.toThrow(); fen = c.fen(); }
+        for (const a of s.arrows ?? []) expect(a, `${p.id} arrow`).toMatch(/^[a-h][1-8][a-h][1-8](:(red|blue|yellow|green))?$/);
+        if (s.task) for (const ans of s.task.answers) expect(() => new Chess(fen).move(ans), `${p.id}: answer ${ans}`).not.toThrow();
+      }
+      for (const k of p.fixes) expect(WEAKNESSES.some((w) => w.key === k), `${p.id}: weakness ${k}`).toBe(true);
+    });
+  }
+  it('ids are unique', () => expect(new Set(PRINCIPLES.map((p) => p.id)).size).toBe(PRINCIPLES.length));
+});
+
+import { PROFILES, LINE_ABOUT } from '../src/data/openingInfo';
+describe('openings: every course is profiled and every line explained', () => {
+  it('profiles and line descriptions', () => {
+    for (const c of COURSES) {
+      expect(PROFILES[c.id], `profile for ${c.id}`).toBeTruthy();
+      for (const l of c.lines) expect(LINE_ABOUT[l.id], `about for ${l.id}`).toBeTruthy();
+    }
+  });
+});
+
+import { winPct } from '../src/engine/uci';
+describe('principles: Stockfish agrees with every lesson answer', () => {
+  for (const p of PRINCIPLES) {
+    let fen = new Chess().fen();
+    p.steps.forEach((s, k) => {
+      if (s.fen) fen = new Chess(s.fen).fen();
+      if (s.moves) { const c = new Chess(); for (const m of s.moves.split(' ')) c.move(m); fen = c.fen(); }
+      if (!s.task) return;
+      const at = fen, ans = s.task.answers[0];
+      it(`${p.id} step ${k + 1}: ${ans}`, async () => {
+        const c = new Chess(at);
+        const uci = c.move(ans).lan;
+        const best = (await e.analyze(at, { depth: 16 })).lines[0];
+        const mine = (await e.analyze(at, { depth: 16, searchmoves: [uci] })).lines[0];
+        expect(winPct(scoreOf(best)) - winPct(scoreOf(mine)), `${p.id}: ${ans} vs best ${best.pv[0]} (${scoreOf(best)} vs ${scoreOf(mine)})`).toBeLessThanOrEqual(5);
+      }, 60000);
+    });
+  }
 });

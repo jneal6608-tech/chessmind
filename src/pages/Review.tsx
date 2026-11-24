@@ -18,6 +18,7 @@ import { storyFor, describeMove, type Step } from '../coach/teach';
 import { IdeaLab } from '../ui/IdeaLab';
 import { AnalysisBoard } from '../ui/AnalysisBoard';
 import { CLASS_LABEL, CLASS_MEANING, CLASS_ORDER, badgeFor } from '../ui/classes';
+import { WhyBetter } from '../ui/WhyBetter';
 import { compareMoves, alternativeCaptures, type Comparison } from '../coach/compare';
 import { WEAKNESS, THEME_LABEL } from '../training/themes';
 import { go } from '../services/router';
@@ -414,12 +415,7 @@ function storedComparison(m: MoveAnalysis): Comparison | null {
 }
 
 function CompareBox({ c }: { c: Comparison }) {
-  return (
-    <div className="mt-2 rounded-lg bg-ink-900 p-2.5 text-sm">
-      <div className="font-semibold text-ink-100"><Explained text={c.summary} /></div>
-      <ul className="mt-1 list-disc pl-5 space-y-0.5 text-ink-300">{c.reasons.map((r, i) => <li key={i}><Explained text={r} /></li>)}</ul>
-    </div>
-  );
+  return <WhyBetter c={c} className="mt-2" />;
 }
 
 /** Details of one move: its label, what it does, and why the best move was better. */
@@ -440,7 +436,7 @@ function MoveCard({ m, mine, onStudy, onExplore }: { m: MoveAnalysis; mine: bool
       <p className="mt-2 text-sm text-ink-200"><Explained text={describeMove(m.fenBefore, m.uci, m.color)} /></p>
       {m.tags[0] && bad && <p className="mt-1 text-xs text-ink-300"><Explained text={m.tags[0].why} /></p>}
       {cmp && m.cls !== 'best' && m.cls !== 'book' && m.cls !== 'forced' && !cmp.equal && <CompareBox c={cmp} />}
-      {cmp && cmp.equal && m.cls !== 'best' && <p className="mt-2 text-xs text-ink-300">Stockfish slightly preferred <b>{m.bestSan}</b>, but the difference is tiny.</p>}
+      {cmp && cmp.equal && m.cls !== 'best' && m.cls !== 'book' && <WhyBetter className="mt-2" c={cmp} title={`Stockfish slightly preferred ${m.bestSan}: the difference is tiny, but here is what each move is going for`} />}
       {(m.cls === 'best' || m.cls === 'great' || m.cls === 'brilliant') && m.secondSan && m.secondSan !== m.san && m.bestCp !== undefined && m.secondCp !== undefined && (
         <p className="mt-2 text-xs text-ink-300">Next best was <b>{m.secondSan}</b> ({formatScore((m.color === 'w' ? 1 : -1) * m.secondCp)} instead of {formatScore((m.color === 'w' ? 1 : -1) * m.bestCp)}).</p>
       )}

@@ -73,9 +73,9 @@ export const THEORY_ENDGAMES: TheoryEndgame[] = [
   },
   {
     id: 'rook-behind', title: 'Rook behind the passed pawn', theme: 'eg_rook', goal: 'win', rating: 1500,
-    fen: '8/8/5k2/8/P7/8/5K2/R6r w - - 0 1',
-    idea: 'Rooks belong behind passed pawns: yours, to push it; the enemy\'s, to stop it. Here your rook already supports the pawn from behind.',
-    steps: ['Push the pawn with rook support.', 'Bring the king toward the action when the enemy rook is tied down.', 'Avoid allowing checks that win the pawn.'],
+    fen: 'r7/6k1/8/P7/8/2K5/8/R7 w - - 0 1',
+    idea: 'Rooks belong behind passed pawns. Your rook on a1 pushes the pawn from behind and gets stronger with every step; their rook on a8 is stuck in front of the pawn, doing nothing but blocking.',
+    steps: ['Push the pawn: every step makes your rook longer and their rook more passive.', 'Bring your king to the pawn (b5-b6) so it can shelter from checks.', 'When their rook has to leave the a-file, the pawn promotes.'],
   },
   {
     id: 'wrong-bishop', title: 'Wrong-coloured bishop', theme: 'eg_draw', goal: 'draw', rating: 1300,

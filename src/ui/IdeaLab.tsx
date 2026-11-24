@@ -1,4 +1,5 @@
 import { Explained } from './Explained';
+import { WhyBetter } from './WhyBetter';
 // "What if I play this?" The player tries a move, Stockfish answers, and the
 // coach explains in plain words why it works or fails. Repeat as often as you like.
 import { useEffect, useState } from 'react';
@@ -92,6 +93,7 @@ export function IdeaLab({ fen, level, intro, theme, coords = true, onClose }: { 
                 ))}
               </ol>
               <p className="mt-2 text-ink-300">Result: <b className="text-ink-100">{e.verdict.result}</b>.</p>
+              {e.verdict.compare && <WhyBetter c={e.verdict.compare} className="mt-2" />}
               {e.verdict.better && (
                 <div className="mt-3 border-t border-ink-700 pt-2">
                   <div className="label !text-[10px]">Better: {e.verdict.better.san}</div>

@@ -14,7 +14,10 @@ import { THEME_LABEL } from '../training/themes';
 import { attempts, srs } from '../store/db';
 import { nextCard } from '../training/srs';
 import { playSound } from '../services/sound';
-import { tryIdea, storyFor, type Verdict, type Step } from '../coach/teach';
+import { tryIdea, storyFor, explainThreat, type Verdict, type Step, type ThreatInfo } from '../coach/teach';
+import { CoachSays, type Mood } from './Coach';
+import { THEME_GUIDE, coachIntro } from '../data/themeGuides';
+import { WhyBetter } from './WhyBetter';
 import { useAppData } from '../services/data';
 import { levelFor } from '../coach/explain';
 
@@ -34,6 +37,8 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
   const [promoted, setPromoted] = useState(false);
   const [why, setWhy] = useState<Verdict | null>(null);
   const [showStep, setShowStep] = useState<{ steps: Step[]; i: number } | null>(null);
+  const [threat, setThreat] = useState<ThreatInfo | null>(null);
+  const [threatShown, setThreatShown] = useState(false);
   const [appData] = useAppData();
   const level = appData ? levelFor(appData.strength.rating, appData.settings.coachLevel) : 'beginner';
   const t0 = useRef(Date.now());
@@ -41,10 +46,25 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
   const side = new Chess(ex.fen).turn();
   const orientation = side === 'w' ? 'white' : 'black';
   const playout = ex.goal === 'win' || ex.goal === 'draw';
+  const defending = ex.goal === 'hold' || ex.theme === 'defense' || ex.theme === 'mating_threat';
+  async function loadThreat(): Promise<ThreatInfo | null> {
+    if (threat) return threat;
+    const mine = token.current;
+    try {
+      const t = await explainThreat(coachEngine, ex.fen, level, ex.threat);
+      if (mine === token.current || t) setThreat(t);
+      return t;
+    } catch { return null; }
+  }
+  async function revealThreat() {
+    const t = await loadThreat();
+    setThreatShown(true);
+    if (t) setArrows([{ from: t.uci.slice(0, 2), to: t.uci.slice(2, 4), color: 'red' }]);
+  }
 
   useEffect(() => {
     setFen(ex.fen); setStep(0); setState('solving'); setMsg(''); setHints(0); setArrows([]); setHighlights({}); setLast(undefined);
-    setRecorded(false); setUserPlies(0); setPromoted(false); setWhy(null); setShowStep(null); t0.current = Date.now(); token.current++;
+    setRecorded(false); setUserPlies(0); setPromoted(false); setWhy(null); setShowStep(null); setThreat(null); setThreatShown(false); t0.current = Date.now(); token.current++;
     // A defence exercise: show where the threat comes from only on request (hint).
   }, [ex.id]);
 
@@ -118,6 +138,10 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
     }, 550);
   }
 
+  useEffect(() => {
+    if ((state === 'solved' || state === 'failed') && defending) { void loadThreat().then(() => setThreatShown(true)); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
   function successText() {
     return ex.explanation ? `Solved! ${cap(ex.explanation)}.` : 'Solved!';
   }
@@ -174,7 +198,8 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
     const exp = ex.solution[step];
     if (!exp) return;
     setHints((h) => h + 1);
-    if (hints === 0) { setHighlights({ [exp.slice(0, 2)]: 'hl-info' }); setMsg('Hint: this piece moves.'); }
+    if (defending && !threatShown && step === 0) { setMsg('Hint: here is what they are threatening. Now find the move that stops it.'); await revealThreat(); return; }
+    if (hints === 0 || (defending && hints === 1)) { setHighlights({ [exp.slice(0, 2)]: 'hl-info' }); setMsg('Hint: this piece moves.'); }
     else show(exp, 'blue');
   }
   function reveal() {
@@ -218,14 +243,26 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
             <span className={`h-4 w-4 rounded-full ring-1 ${side === 'w' ? 'bg-ink-100 ring-black/40' : 'bg-ink-950 ring-ink-400'}`} />
             <span className="font-semibold">{side === 'w' ? 'White' : 'Black'} to move · {goalText}</span>
           </div>
-          {ex.prompt && <p className="mt-2 text-sm text-ink-300"><Explained text={ex.prompt} /></p>}
           {ex.played && <p className="mt-1 text-xs text-ink-400">In the game you played {sanOf(ex.fen, ex.played)}.</p>}
-          {msg && <p className={`mt-3 text-sm ${state === 'solved' ? 'text-good' : state === 'failed' || state === 'wrong' ? 'text-mistake' : 'text-ink-200'}`}><Explained text={msg} /></p>}
+          <CoachSays className="mt-3" mood={coachMood(state, hints)}>
+            {msg ? <span className={state === 'solved' ? 'text-good' : state === 'failed' || state === 'wrong' ? 'text-mistake' : ''}><Explained text={msg} /></span>
+              : <><Explained text={ex.prompt || ''} />{!playout && <span className="block mt-1 text-ink-300"><Explained text={coachIntro(ex.theme, ex.goal, level)} /></span>}</>}
+          </CoachSays>
+          {defending && !done && !threatShown && <button className="btn btn-sm mt-2" onClick={() => { setHints((h) => h + 1); void revealThreat(); }}>What are they threatening?</button>}
+          {defending && threatShown && threat && (
+            <div className="mt-2 rounded-lg bg-blunder/10 ring-1 ring-blunder/30 p-3 text-sm">
+              <div className="label !text-[10px]">Their threat</div>
+              <p className="mt-1 text-ink-100"><Explained text={threat.summary} /></p>
+              <ol className="mt-1 space-y-0.5">{threat.steps.slice(0, 4).map((st, j) => <li key={j} className="text-ink-300"><span className="font-mono text-xs text-ink-500 mr-1">{j + 1}.</span><Explained text={st.text} /></li>)}</ol>
+              {!done && <p className="mt-1 text-xs text-ink-400">Ways to deal with a threat: move the target, defend it, block the line, capture the attacker, or make a bigger threat of your own.</p>}
+            </div>
+          )}
           {why && !why.ok && (
             <div className="mt-2 rounded-lg bg-blunder/10 ring-1 ring-blunder/30 p-3 text-sm">
               <p className="text-ink-100"><Explained text={why.reason} /></p>
               <ol className="mt-2 space-y-1">{why.story.map((st, j) => <li key={j}><button className="text-left text-ink-300 hover:text-ink-100" onClick={() => { setShowStep({ steps: why.story, i: j }); setFen(st.fenAfter); setLast([st.uci.slice(0, 2), st.uci.slice(2, 4)]); }}><span className="font-mono text-xs text-ink-500 mr-1">{j + 1}.</span></button><Explained text={st.text} /></li>)}</ol>
               <p className="mt-2 text-ink-300">Result: <b className="text-ink-100">{why.result}</b>.</p>
+              {state === 'failed' && why.compare && <WhyBetter c={why.compare} className="mt-2" />}
               {showStep && <button className="btn btn-sm mt-2" onClick={() => { setShowStep(null); setFen(ex.fen); setLast(undefined); }}>Back to the puzzle</button>}
             </div>
           )}
@@ -235,6 +272,7 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
               <ol className="mt-1 space-y-1">{st.steps.map((x, j) => <li key={j} className="text-ink-200"><span className="font-mono text-xs text-ink-500 mr-1">{j + 1}.</span><Explained text={x.text} /></li>)}</ol>
               <p className="mt-1 text-ink-300">Result: <b className="text-ink-100">{st.result}</b>.</p>
             </div>) : null; })()}
+          {done && !playout && THEME_GUIDE[ex.theme] && <LessonBox theme={ex.theme} level={level} />}
           {state === 'checking' && <p className="mt-3 text-sm text-ink-300 flex items-center gap-2"><Spinner /> Checking your move with Stockfish…</p>}
           {state === 'replying' && playout && <p className="mt-3 text-sm text-ink-300 flex items-center gap-2"><Spinner /> Engine is thinking…</p>}
           {playout && ex.explanation && <p className="mt-3 text-xs text-ink-400"><Explained text={ex.explanation} /></p>}
@@ -250,6 +288,27 @@ export function Solver({ ex, mode, theme, onDone, onNext }: { ex: Exercise; mode
         </div>
         {hints > 0 && !done && <p className="text-xs text-ink-500">Hints count as half a success for your training rating.</p>}
       </div>
+    </div>
+  );
+}
+function coachMood(state: string, hints: number): Mood {
+  if (state === 'solved') return hints ? 'happy' : 'cool';
+  if (state === 'failed') return 'concerned';
+  if (state === 'wrong') return 'concerned';
+  if (state === 'checking' || state === 'replying') return 'thinking';
+  return 'neutral';
+}
+
+function LessonBox({ theme, level }: { theme: string; level: string }) {
+  const g = THEME_GUIDE[theme];
+  return (
+    <div className="mt-2 rounded-lg bg-brass-500/10 ring-1 ring-brass-500/30 p-3 text-sm">
+      <div className="label !text-[10px]">The lesson: {THEME_LABEL[theme] ?? theme}</div>
+      <p className="mt-1 text-ink-100"><Explained text={g.what} /></p>
+      <p className="mt-1 text-ink-300"><b className="text-ink-200">Spot it:</b> <Explained text={g.spot} /></p>
+      <div className="mt-1 text-ink-300"><b className="text-ink-200">Ask yourself:</b><ul className="list-disc pl-5">{g.ask.map((a) => <li key={a}><Explained text={a} /></li>)}</ul></div>
+      <p className="mt-1 text-ink-300"><b className="text-ink-200">Classic mistake:</b> <Explained text={g.trap} /></p>
+      {level !== 'beginner' && g.deeper && <p className="mt-1 text-ink-300"><b className="text-ink-200">Deeper:</b> <Explained text={g.deeper} /></p>}
     </div>
   );
 }

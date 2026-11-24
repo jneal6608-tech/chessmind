@@ -71,3 +71,35 @@ describe('PGN import', () => {
     expect(clockTimes('', '600+0')).toBeUndefined();
   });
 });
+
+import { getLessons, recordLesson, mergeLessons } from '../src/store/lessons';
+describe('lesson progress', () => {
+  it('is saved in the database and survives a backup round trip', async () => {
+    resetDbHandle();
+    await wipeAll();
+    await recordLesson('cct', 1, 1);
+    await recordLesson('cct', 0, 1);
+    const l = await getLessons();
+    expect(l.cct.times).toBe(2);
+    expect(l.cct.right).toBe(0);
+    const backup = await exportAll();
+    expect(JSON.parse(backup).kv.lessons.cct).toBeTruthy();
+    await wipeAll();
+    expect(Object.keys(await getLessons())).toHaveLength(0);
+    await importAll(backup, 'replace');
+    expect((await getLessons()).cct.times).toBe(2);
+  });
+  it('importing merges with lessons done on this device', async () => {
+    resetDbHandle();
+    await wipeAll();
+    await recordLesson('iqp', 2, 2);
+    const backup = JSON.stringify({ app: 'ChessMind', version: 1, kv: { lessons: { cct: { completedAt: 1, right: 1, total: 1, times: 1 } } } });
+    await importAll(backup, 'merge');
+    const l = await getLessons();
+    expect(Object.keys(l).sort()).toEqual(['cct', 'iqp']);
+  });
+  it('merge keeps the latest result and the most runs', () => {
+    const m = mergeLessons({ a: { completedAt: 5, right: 1, total: 2, times: 3 } }, { a: { completedAt: 9, right: 2, total: 2, times: 1 } });
+    expect(m.a).toEqual({ completedAt: 9, right: 2, total: 2, times: 3 });
+  });
+});
