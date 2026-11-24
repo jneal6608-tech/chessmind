@@ -6,29 +6,36 @@ import { Explained } from './Explained';
 
 export type Mood = 'neutral' | 'happy' | 'thinking' | 'concerned' | 'cool' | 'excited';
 
-// Haircut: a taper with coils. The coils sit on top (volume, falling a little
-// over the front); the sides are cut tight to the head with a crisp line-up and
-// sharp temple corners, fading to skin at the sideburns by mid-ear.
+// Haircut (from the front reference): loose open coils with volume on top,
+// falling onto the forehead and down the sides to the top of the ears; a low
+// taper at the sideburns that fades to skin in front of the ears.
 interface Curl { x: number; y: number; r: number; a: number; tip: boolean }
+const inHair = (x: number, y: number) => {
+  const dx = (x - 100) / 52, dy = (y - 50) / 30;
+  if (dx * dx + dy * dy <= 1) {
+    // fringe: uneven curls down to ~70 in the middle, the temples a bit higher
+    const fringe = 70 - Math.abs(x - 100) * 0.08 + Math.sin(x / 4) * 2;
+    return y <= fringe || Math.abs(x - 100) > 38;
+  }
+  // sides: curls falling to the top of the ears
+  return y >= 50 && y <= 96 - Math.abs(y - 70) * 0.1 && ((x >= 50 && x <= 63) || (x >= 137 && x <= 150));
+};
 const CURLS: Curl[] = (() => {
-  let s = 11;
+  let s = 13;
   const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   const out: Curl[] = [];
-  for (let i = 0; i < 1200 && out.length < 200; i++) {
-    const x = 58 + rnd() * 84, y = 18 + rnd() * 50;
-    const dx = (x - 100) / 43, dy = (y - 46) / 22;
-    if (dx * dx + dy * dy > 1) continue;
-    const front = Math.abs(x - 100) < 26 ? 67 : 63; // coils fall slightly over the middle of the forehead
-    if (y > front) continue;
-    out.push({ x, y, r: 2.3 + rnd() * 1.9, a: rnd() * 360, tip: y < 48 && rnd() < 0.7 });
+  for (let i = 0; i < 2400 && out.length < 170; i++) {
+    const x = 46 + rnd() * 108, y = 18 + rnd() * 80;
+    if (!inHair(x, y)) continue;
+    out.push({ x, y, r: 3 + rnd() * 2.6, a: rnd() * 360, tip: y < 52 && rnd() < 0.6 });
   }
   return out.sort((p, q) => q.y - p.y);
 })();
-// Bumpy outline of the coils on top only.
-const RIM: [number, number, number][] = Array.from({ length: 16 }, (_, i) => {
-  const t = Math.PI * (1.1 + (i / 15) * 0.8);
-  return [100 + Math.cos(t) * 42, 48 + Math.sin(t) * 21, 4.5 + (i % 3) * 1.1];
-});
+// Uneven outline of the hair (top and sides).
+const RIM: [number, number, number][] = [
+  ...Array.from({ length: 18 }, (_, i) => { const t = Math.PI * (1.0 + (i / 17) * 1.0); return [100 + Math.cos(t) * 52, 50 + Math.sin(t) * 30, 5 + (i % 3) * 1.4] as [number, number, number]; }),
+  [50, 62, 6], [49, 74, 5.5], [51, 86, 5], [150, 62, 6], [151, 74, 5.5], [149, 86, 5],
+];
 
 export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { mood?: Mood; size?: number; className?: string }) {
   const id = useId().replace(/:/g, '');
@@ -44,7 +51,8 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
     : 'M109 85 Q122 81 133 87 L132 90 Q121 85 109 88 Z';
   const lid = mood === 'happy' ? 2.5 : mood === 'concerned' ? 1 : mood === 'thinking' ? 1.5 : 0.5; // hooded, relaxed lids
   const lookX = mood === 'thinking' ? 3 : 0, lookY = mood === 'thinking' ? -1.5 : 0;
-  const mouth = mood === 'happy' || mood === 'cool' ? { up: 'M84 141 Q92 138 100 139 Q108 138 116 141', low: 'M84 141 Q100 152 116 141 Q100 146 84 141 Z' }
+  const smile = mood === 'happy' || mood === 'excited';
+  const mouth = mood === 'cool' ? { up: 'M84 141 Q92 138 100 139 Q108 138 116 141', low: 'M84 141 Q100 152 116 141 Q100 146 84 141 Z' }
     : mood === 'excited' ? { up: 'M83 140 Q100 136 117 140', low: 'M83 140 Q100 158 117 140 Z' }
     : mood === 'concerned' ? { up: 'M86 144 Q93 140 100 141 Q107 140 114 144', low: 'M86 144 Q100 149 114 144 Q100 145 86 144 Z' }
     : mood === 'thinking' ? { up: 'M86 143 Q94 140 100 141 Q108 139 115 140', low: 'M86 143 Q101 148 115 140 Q101 144 86 143 Z' }
@@ -91,26 +99,23 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         <ellipse cx="122" cy="114" rx="9" ry="5" fill="#b07656" opacity="0.25" />
         {/* forehead highlight */}
         <ellipse cx="98" cy="79" rx="16" ry="5" fill="#b88262" opacity="0.25" />
-        {/* tapered sides: short hair tight to the head, darkest at the top, fading to skin at the sideburn */}
-        <path d="M72 64 L62 66 Q55 72 54.5 86 Q54.5 98 57 110 L63 110 Q62 98 63.5 86 Q65 74 69 69 Z" fill={`url(#${u('fade')})`} />
-        <path d="M128 64 L138 66 Q145 72 145.5 86 Q145.5 98 143 110 L137 110 Q138 98 136.5 86 Q135 74 131 69 Z" fill={`url(#${u('fade')})`} />
-        {/* the short layer above the ears, hugging the skull */}
-        <path d="M55 70 Q57 54 70 46 L73 62 Q63 64 59 72 Z" fill="#1a120d" />
-        <path d="M145 70 Q143 54 130 46 L127 62 Q137 64 141 72 Z" fill="#1a120d" />
-        {/* crisp line-up across the forehead with sharp temple corners */}
-        <path d="M64 66 L71 64 Q100 60 129 64 L136 66 Q134 52 124 42 L76 42 Q66 52 64 66 Z" fill="#1a120d" />
-        {/* coils on top */}
+        {/* low taper: short at the sideburns, fading to skin in front of the ears */}
+        <path d="M56 88 Q55 98 58 112 L63 112 Q62 100 63 90 Z" fill={`url(#${u('fade')})`} />
+        <path d="M144 88 Q145 98 142 112 L137 112 Q138 100 137 90 Z" fill={`url(#${u('fade')})`} />
+        {/* hair mass: top and the sides down to the ears */}
+        <ellipse cx="100" cy="50" rx="50" ry="28" fill="#1a120d" />
+        <path d="M50 52 Q46 72 52 96 L62 92 Q60 72 66 60 Z M150 52 Q154 72 148 96 L138 92 Q140 72 134 60 Z" fill="#1a120d" />
+        <path d="M62 62 Q80 54 100 55 Q120 54 138 62 L136 70 Q120 66 100 67 Q80 66 64 70 Z" fill="#1a120d" />
         {RIM.map(([x, y, r], i) => <circle key={'r' + i} cx={x} cy={y} r={r} fill="#1a120d" />)}
-        <ellipse cx="100" cy="47" rx="42" ry="20" fill="#1a120d" />
         {CURLS.map((c, i) => (
           <g key={i} transform={`rotate(${c.a} ${c.x} ${c.y})`}>
-            <path d={`M${c.x - c.r} ${c.y} a${c.r} ${c.r} 0 1 1 ${c.r * 1.7} ${c.r * 0.7} a${c.r * 0.6} ${c.r * 0.6} 0 1 1 ${-c.r * 0.9} ${-c.r * 0.6}`} fill="none" stroke="#2c1e16" strokeWidth="1.8" strokeLinecap="round" />
-            <path d={`M${c.x - c.r * 0.5} ${c.y - c.r * 0.8} a${c.r * 0.8} ${c.r * 0.8} 0 0 1 ${c.r * 1.1} ${c.r * 0.15}`} fill="none" stroke={c.tip ? '#a87b4d' : '#4a3424'} strokeWidth="1.25" strokeLinecap="round" opacity={c.tip ? 0.95 : 0.75} />
+            <path d={`M${c.x - c.r} ${c.y} a${c.r} ${c.r} 0 1 1 ${c.r * 1.7} ${c.r * 0.7} a${c.r * 0.6} ${c.r * 0.6} 0 1 1 ${-c.r * 0.9} ${-c.r * 0.6}`} fill="none" stroke="#2e2018" strokeWidth="2" strokeLinecap="round" />
+            <path d={`M${c.x - c.r * 0.5} ${c.y - c.r * 0.8} a${c.r * 0.8} ${c.r * 0.8} 0 0 1 ${c.r * 1.1} ${c.r * 0.15}`} fill="none" stroke={c.tip ? '#9c7046' : '#4a3424'} strokeWidth="1.3" strokeLinecap="round" opacity={c.tip ? 0.9 : 0.75} />
           </g>
         ))}
-        {/* coils hanging over the front of the hairline */}
-        {[[82, 66], [91, 68], [100, 67], [109, 68], [118, 66]].map(([x, y], i) => (
-          <path key={'h' + i} d={`M${x - 3.5} ${y} a3.5 3.5 0 1 1 5 3`} fill="none" stroke="#1a120d" strokeWidth="2.6" strokeLinecap="round" />
+        {/* loose coils hanging onto the forehead */}
+        {[[78, 71, 3.6, 20], [92, 73, 4.2, -30], [104, 72, 3.4, 60], [119, 72, 3.8, -10]].map(([x, y, r, a], i) => (
+          <path key={'h' + i} transform={`rotate(${a} ${x} ${y})`} d={`M${x - r} ${y - 3} q${r * 0.2} ${r * 1.6} ${r} ${r * 1.4} q${r * 0.9} ${-r * 0.3} ${r * 0.4} ${-r}`} fill="none" stroke="#1a120d" strokeWidth="2.2" strokeLinecap="round" />
         ))}
         {/* brows */}
         <g transform={`translate(0 ${browY})`}>
@@ -149,11 +154,23 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         <ellipse cx="100" cy="119" rx="5" ry="3.5" fill="#a86f4d" opacity="0.6" />
         <path d="M91 124 Q94 122 96 125 M104 125 Q106 122 109 124" stroke="#3d2214" strokeWidth="2" fill="none" strokeLinecap="round" />
         {/* lips */}
-        <path d={mouth.up + (mood === 'excited' ? '' : ' Q100 136 85 142 Z')} fill={mood === 'excited' ? 'none' : '#6e3b2f'} stroke="#4a241b" strokeWidth="1.2" />
-        <path d={mouth.low} fill={mood === 'excited' ? '#3a1712' : `url(#${u('lip')})`} />
-        {mood === 'excited' && <path d="M88 142 Q100 146 112 142 L111 144 Q100 147 89 144 Z" fill="#f4efe9" />}
+        {smile ? (
+          <g>
+            <path d="M84 139 Q100 135.5 116 139 Q112 152 100 153 Q88 152 84 139 Z" fill="#3a1712" />
+            <path d="M85 140 Q100 137 115 140 L114 145 Q100 147 86 145 Z" fill="#f1ebe2" />
+            <path d="M90 140.5 V145.5 M95 140 V146 M100 139.8 V146.3 M105 140 V146 M110 140.5 V145.5" stroke="#cfc4b6" strokeWidth="0.6" />
+            <path d="M85 142.5 Q100 144 115 142.5" stroke="#b8b0a6" strokeWidth="0.9" fill="none" />
+            <path d="M84 139 Q100 135.5 116 139" stroke="#6e3b2f" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+            <path d="M86 150 Q100 157 114 150" stroke={`url(#${u('lip')})`} strokeWidth="3" fill="none" strokeLinecap="round" />
+          </g>
+        ) : (
+          <g>
+            <path d={mouth.up + ' Q100 136 85 142 Z'} fill="#6e3b2f" stroke="#4a241b" strokeWidth="1.2" />
+            <path d={mouth.low} fill={`url(#${u('lip')})`} />
+          </g>
+        )}
         {/* thin mustache + chin hair */}
-        <path d="M84 135 Q92 130 100 132 Q108 130 116 135" stroke="#1d1410" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity="0.85" />
+        <path d="M83 137 Q85 132.5 92 131.5 Q100 132.5 108 131.5 Q115 132.5 117 137" stroke="#1d1410" strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.85" />
         <path d="M86 136 Q92 133 99 134 M101 134 Q108 133 114 136" stroke="#0f0a07" strokeWidth="1" fill="none" opacity="0.8" />
         <path d="M95 152 Q100 155 105 152" stroke="#1d1410" strokeWidth="1.6" fill="none" opacity="0.45" strokeDasharray="1 1.2" />
       </g>
