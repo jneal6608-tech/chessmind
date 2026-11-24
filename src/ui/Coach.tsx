@@ -27,6 +27,17 @@ const CURLS: Curl[] = (() => {
   }
   return out.sort((p, q) => q.y - p.y);
 })();
+// Coils on the sides of the head (behind the tapered temples), down to the top of the ears.
+const SIDE: Curl[] = (() => {
+  let s = 29;
+  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  const out: Curl[] = [];
+  for (const side of [-1, 1]) for (let i = 0; i < 34; i++) {
+    const y = 50 + rnd() * 44, x = 100 + side * (44 + rnd() * 9 - Math.max(0, y - 84) * 0.5);
+    out.push({ x, y, r: 2.8 + rnd() * 2, a: rnd() * 360, tip: rnd() < 0.3 });
+  }
+  return out;
+})();
 // Clumps that give the rounded, uneven outline (and a soft, curly lower edge over the forehead).
 const RIM: [number, number, number][] = (() => {
   const out: [number, number, number][] = [];
@@ -84,6 +95,16 @@ export function CoachAvatar({ mood = 'neutral', size = 72, className = '' }: { m
         {/* chain */}
         <path d="M80 160 Q100 180 120 160" stroke="#c9ced4" strokeWidth="2.2" fill="none" strokeDasharray="2.6 1.4" />
         <path d="M80 160 Q100 180 120 160" stroke="#ffffff" strokeWidth="0.8" fill="none" strokeDasharray="1 3" opacity="0.8" />
+        {/* side hair: coils down the sides of the head behind the temples, to the top of the ears */}
+        <path d="M60 48 Q44 56 45 74 Q46 88 54 97 Q60 92 62 80 Z" fill="#1a120d" />
+        <path d="M140 48 Q156 56 155 74 Q154 88 146 97 Q140 92 138 80 Z" fill="#1a120d" />
+        {[[48, 60, 6], [46, 72, 6], [48, 84, 5.5], [53, 93, 4.5], [152, 60, 6], [154, 72, 6], [152, 84, 5.5], [147, 93, 4.5]].map(([x, y, r], i) => <circle key={'sc' + i} cx={x} cy={y} r={r} fill="#1a120d" />)}
+        {SIDE.map((c, i) => (
+          <g key={'s' + i} transform={`rotate(${c.a} ${c.x} ${c.y})`}>
+            <path d={`M${c.x - c.r} ${c.y} a${c.r} ${c.r} 0 1 1 ${c.r * 1.7} ${c.r * 0.7} a${c.r * 0.6} ${c.r * 0.6} 0 1 1 ${-c.r * 0.9} ${-c.r * 0.6}`} fill="none" stroke="#2e2018" strokeWidth="1.9" strokeLinecap="round" />
+            <path d={`M${c.x - c.r * 0.5} ${c.y - c.r * 0.8} a${c.r * 0.8} ${c.r * 0.8} 0 0 1 ${c.r * 1.1} ${c.r * 0.15}`} fill="none" stroke={c.tip ? '#9c7046' : '#4a3424'} strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+          </g>
+        ))}
         {/* ears */}
         <path d="M58 96 Q48 94 48 106 Q49 120 60 124 Z" fill="#7c4a2f" />
         <path d="M142 96 Q152 94 152 106 Q151 120 140 124 Z" fill="#7c4a2f" />
