@@ -14,6 +14,11 @@ import { lookupOpening, openingFamily } from '../openings/identify';
 import { resultFor } from '../ui/common';
 import { playSound } from '../services/sound';
 import { go } from '../services/router';
+import { teachMove, lineSummary } from '../openings/teachLine';
+import { CoachSays } from '../ui/Coach';
+import { WhyBetter } from '../ui/WhyBetter';
+import { analyzeCandidates, compareMoves, type Comparison } from '../coach/compare';
+import { coachEngine } from '../engine/browser';
 import { PROFILES, LINE_ABOUT, CHARACTER_TEXT, THEORY_TEXT, APPROACH_TEXT, type OpeningProfile } from '../data/openingInfo';
 
 interface PLine { id: string; name: string; color: 'w' | 'b'; uci: string[]; san: string[]; notes: Record<number, string>; trap?: { badPly: number; text: string }; courseId?: string; custom?: boolean }
@@ -50,6 +55,7 @@ export function OpeningsPage({ route }: { route: string[] }) {
   if (!data) return <Page title="Openings"><Spinner /></Page>;
   if (route[0] === 'course' && route[1]) return <CourseView data={data} id={route[1]} />;
   if (route[0] === 'practice' && route[1]) return <PracticeView data={data} lineId={route[1]} />;
+  if (route[0] === 'learn' && route[1]) return <LearnView key={route[1]} data={data} lineId={route[1]} />;
   return <OpeningsHome data={data} />;
 }
 
@@ -121,7 +127,7 @@ function MyRepertoire({ data, onAdd }: { data: AppData; onAdd: () => void }) {
               <div key={l.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-900 px-3 py-2">
                 <div className="min-w-0"><div className="text-sm font-semibold truncate">{l.name}</div><div className="text-xs text-ink-400 font-mono truncate">{formatLine(new Chess().fen(), p.san)}</div>
                   <div className="text-[11px] text-ink-500">{card ? (card.lastSuccess ? `next review ${new Date(card.due).toLocaleDateString()}` : 'needs practice') : 'not practised yet'}</div></div>
-                <div className="flex gap-1 shrink-0"><button className="btn btn-sm btn-primary" onClick={() => go(`openings/practice/${l.id}`)}>Practise</button><button className="btn btn-sm" onClick={() => REP.del(l.id)} aria-label="Remove">✕</button></div>
+                <div className="flex gap-1 shrink-0"><button className="btn btn-sm btn-primary" onClick={() => go(`openings/practice/${l.id}`)}>Practise</button><button className="btn btn-sm" onClick={() => go(`play/line/${l.id}`)}>Play</button><button className="btn btn-sm" onClick={() => REP.del(l.id)} aria-label="Remove">✕</button></div>
               </div>); })}
             {!lines.some((l) => l.color === col) && <p className="text-sm text-ink-400">No lines yet.</p>}
           </div>
@@ -176,10 +182,24 @@ function CourseView({ data, id }: { data: AppData; id: string }) {
             </div>
             {LINE_ABOUT[line.id] && <p className="mt-2 text-sm text-ink-300"><b className="text-ink-100">{line.name}:</b> <Explained text={LINE_ABOUT[line.id]} /></p>}
             {nameHere && ply >= 0 && <p className="mt-1 text-xs text-brass-300">Position: {nameHere}</p>}
-            <div className="mt-3 min-h-[3rem] text-sm text-ink-200">{note ? <Explained text={note} /> : (ply < 0 ? 'Step through the line with ▶. Each key move has a short note.' : nameHere ? <span className="text-ink-400">{nameHere}</span> : '')}</div>
+            <div className="mt-3 min-h-[3rem] text-sm text-ink-200">{ply < 0 ? 'Step through the line with ▶: every move is explained. Or use "Learn this line" to find the moves yourself from their ideas.' : (() => {
+              const before = new Chess(); for (const u of line.uci.slice(0, ply)) tryMove(before, u);
+              const t = teachMove(before.fen(), line.uci[ply], c.color, note);
+              return <><span className="label !text-[10px] block">{t.mine ? 'Why this move' : 'Their idea'} · {Math.floor(ply / 2) + 1}{ply % 2 === 0 ? '.' : '...'}{t.san}</span><Explained text={t.text} /></>;
+            })()}</div>
+            {ply === line.uci.length - 1 && (
+              <div className="mt-3 rounded-lg bg-ink-900 p-3 text-sm">
+                <div className="label !text-[10px]">Where this line leaves you</div>
+                <ul className="mt-1 list-disc pl-5 space-y-0.5 text-ink-300">{lineSummary(ch.fen(), c.color).map((x) => <li key={x}>{x}</li>)}</ul>
+                <div className="label !text-[10px] mt-2">Your plans from here</div>
+                <ul className="mt-1 list-disc pl-5 space-y-0.5 text-ink-200">{c.plans.map((x) => <li key={x}><Explained text={x} /></li>)}</ul>
+              </div>
+            )}
             {line.trap && ply >= line.trap.badPly && <p className="mt-2 text-sm text-miss"><Explained text={line.trap.text} /></p>}
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn btn-primary btn-sm" onClick={() => go(`openings/practice/${line.id}`)}>Practise this line</button>
+              <button className="btn btn-primary btn-sm" onClick={() => go(`openings/learn/${line.id}`)}>Learn this line</button>
+              <button className="btn btn-sm" onClick={() => go(`openings/practice/${line.id}`)}>Practise from memory</button>
+              <button className="btn btn-sm" onClick={() => go(`play/line/${line.id}`)}>Play it vs the bot</button>
               <button className="btn btn-sm" disabled={inRep} onClick={() => REP.put({ id: uid(), color: c.color, name: `${c.name}: ${line.name}`, moves: line.uci, source: 'builtin', courseId: c.id, created: Date.now() })}>{inRep ? 'In my repertoire ✓' : 'Add to my repertoire'}</button>
             </div>
           </Card>
@@ -224,11 +244,12 @@ function PracticeView({ data, lineId }: { data: AppData; lineId: string }) {
   function onMove(uci: string) {
     if (done || !userIdx(ply)) return;
     const expected = line!.uci[ply];
-    if (uci === expected) { setPly(ply + 1); setMsg(line!.notes[ply] ?? 'Correct.'); setWrongSq(null); playSound('move'); }
+    if (uci === expected) { setPly(ply + 1); setMsg(`Correct. ${teachMove(ch.fen(), expected, line!.color, line!.notes[ply]).text}`); setWrongSq(null); playSound('move'); }
     else {
       setErrors((e) => e + 1);
       const san = new Chess(ch.fen()).move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] as 'q' | undefined })?.san;
-      setMsg(`${san} is not the repertoire move. ${line!.notes[ply] ? 'Hint: ' + line!.notes[ply] : 'Think about the main idea of this opening.'}`);
+      const t = teachMove(ch.fen(), expected, line!.color, line!.notes[ply]);
+      setMsg(`${san} is not the repertoire move. The idea of the book move: ${t.clue}`);
       setWrongSq(expected.slice(0, 2));
       playSound('bad');
     }
@@ -351,5 +372,105 @@ function AboutCard({ p }: { p: OpeningProfile }) {
       <div className="mt-2 text-sm"><span className="label">Who it suits</span><p className="text-ink-200">{p.suits}</p></div>
       <div className="mt-2 text-sm"><span className="label">Know this first</span><p className="text-ink-200"><Explained text={p.knowFirst} /></p></div>
     </Card>
+  );
+}
+
+/**
+ * Guided learning of one line: their moves are played and explained; before
+ * each of YOUR moves the coach gives the idea, you find the move. A different
+ * move gets an engine comparison: why the book move is better.
+ */
+function LearnView({ data, lineId }: { data: AppData; lineId: string }) {
+  const line = findLine(data, lineId);
+  const course = line?.courseId ? COURSES.find((x) => x.id === line.courseId) : undefined;
+  const [ply, setPly] = useState(0); // moves already on the board
+  const [phase, setPhase] = useState<'ask' | 'explain' | 'wrong'>('explain');
+  const [tried, setTried] = useState<string | null>(null);
+  const [cmp, setCmp] = useState<Comparison | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [mistakes, setMistakes] = useState(0);
+  const mine = (i: number) => (line!.color === 'w' ? i % 2 === 0 : i % 2 === 1);
+  useEffect(() => {
+    if (!line || ply >= line.uci.length) return;
+    // Their move: play it and explain. Your move: ask with the idea as a clue.
+    if (!mine(ply)) { const t = setTimeout(() => { setPly(ply + 1); setPhase('explain'); playSound('move'); }, 600); return () => clearTimeout(t); }
+    setPhase('ask'); setTried(null); setCmp(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ply, line?.id]);
+  if (!line) return <Page title="Learn"><Empty>Line not found.</Empty></Page>;
+  const done = ply >= line.uci.length && phase !== 'ask';
+  const boardMoves = line.uci.slice(0, ply);
+  const ch = new Chess(); for (const u of boardMoves) tryMove(ch, u);
+  const fenNow = ch.fen();
+  const before = (i: number) => { const c = new Chess(); for (const u of line.uci.slice(0, i)) tryMove(c, u); return c.fen(); };
+  const lastT = ply > 0 ? teachMove(before(ply - 1), line.uci[ply - 1], line.color, line.notes[ply - 1]) : null;
+  const askT = ply < line.uci.length && mine(ply) ? teachMove(fenNow, line.uci[ply], line.color, line.notes[ply]) : null;
+  const lastU = ply > 0 ? line.uci[ply - 1] : undefined;
+
+  async function onMove(uci: string) {
+    if (phase !== 'ask' && phase !== 'wrong') return;
+    const expected = line!.uci[ply];
+    if (uci === expected) { setPly(ply + 1); setPhase('explain'); setCmp(null); playSound('good'); return; }
+    const t = new Chess(fenNow); const m = tryMove(t, uci); if (!m) return;
+    setTried(m.san); setPhase('wrong'); setMistakes((n) => n + 1); playSound('bad');
+    setBusy(true); setCmp(null);
+    try {
+      const cands = await analyzeCandidates(coachEngine, fenNow, [expected, uci], 14);
+      const b = cands.find((x) => x.uci === expected), y = cands.find((x) => x.uci === uci);
+      if (b && y) setCmp(compareMoves(fenNow, b, y));
+    } catch { /* engine busy */ } finally { setBusy(false); }
+  }
+  return (
+    <div className="mx-auto w-full max-w-[1280px] px-2 sm:px-6 py-3 sm:py-6 fade-in">
+      <div className="mb-3 px-2 sm:px-0"><button onClick={() => history.back()} className="text-xs text-ink-400 hover:text-ink-200">← Back</button><h1 className="h-display text-2xl">Learn: {line.name}</h1>
+        <p className="text-sm text-ink-300">Their moves are played and explained. Before each of your moves you get the idea; find the move that does it.</p></div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_400px] items-start">
+        <div className="mx-auto w-full max-w-[min(100%,calc(100vh-180px))]">
+          <Board fen={fenNow} orientation={line.color === 'w' ? 'white' : 'black'} movable={!done && (phase === 'ask' || phase === 'wrong') ? (line.color === 'w' ? 'white' : 'black') : 'none'} onMove={onMove}
+            lastMove={lastU ? [lastU.slice(0, 2), lastU.slice(2, 4)] : undefined} theme={data.settings.boardTheme} />
+          <p className="mt-2 text-center font-mono text-xs text-ink-400">{formatLine(new Chess().fen(), line.san.slice(0, ply)) || 'Start position'}</p>
+        </div>
+        <div className="space-y-3">
+          <Card>
+            <div className="mb-3 flex gap-0.5">{line.uci.map((_, i) => <span key={i} className={`h-1.5 flex-1 rounded-full ${i < ply ? 'bg-brass-500' : 'bg-ink-700'} ${mine(i) ? '' : 'opacity-60'}`} />)}</div>
+            {lastT && phase !== 'wrong' && (
+              <div className="mb-3 rounded-lg bg-ink-900 p-3 text-sm">
+                <span className="label !text-[10px] block">{lastT.mine ? 'Your move' : 'Their move'} · {Math.floor((ply - 1) / 2) + 1}{(ply - 1) % 2 === 0 ? '.' : '...'}{lastT.san}</span>
+                <Explained text={lastT.text} />
+              </div>
+            )}
+            {!done && phase === 'ask' && askT && (
+              <CoachSays mood="thinking" size={56}>
+                <span className="font-semibold text-brass-300">Your move.</span> The idea: <Explained text={askT.clue} />
+              </CoachSays>
+            )}
+            {phase === 'wrong' && askT && (
+              <CoachSays mood="concerned" size={56}>
+                <b>{tried}</b> isn't the book move. {busy ? 'Let me compare it with the book move…' : ''} The idea was: <Explained text={askT.clue} />
+              </CoachSays>
+            )}
+            {phase === 'wrong' && cmp && <WhyBetter c={cmp} className="mt-2" title={`Why the book move ${cmp.better.uci === line.uci[ply] ? cmp.better.san : cmp.worse.san} is the choice`} />}
+            {phase === 'wrong' && <div className="mt-3 flex gap-2"><button className="btn btn-sm" onClick={() => { setPhase('ask'); setCmp(null); }}>Try again</button>
+              <button className="btn btn-sm" onClick={() => { setPly(ply + 1); setPhase('explain'); setCmp(null); }}>Show me</button></div>}
+            {done && (
+              <div className="space-y-3">
+                <CoachSays mood={mistakes ? 'happy' : 'cool'} size={56} text={mistakes ? `Line done with ${mistakes} slip${mistakes > 1 ? 's' : ''}. Learn it again tomorrow, then practise it from memory.` : 'Line done without a slip. Now practise it from memory, then play it against the bot.'} />
+                <div className="rounded-lg bg-ink-900 p-3 text-sm">
+                  <div className="label !text-[10px]">Where this line leaves you</div>
+                  <ul className="mt-1 list-disc pl-5 space-y-0.5 text-ink-300">{lineSummary(fenNow, line.color).map((x) => <li key={x}>{x}</li>)}</ul>
+                  {course && <><div className="label !text-[10px] mt-2">Your plans from here</div><ul className="mt-1 list-disc pl-5 space-y-0.5 text-ink-200">{course.plans.map((x) => <li key={x}><Explained text={x} /></li>)}</ul></>}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn btn-primary btn-sm" onClick={() => go(`play/line/${line.id}`)}>Play it vs the bot</button>
+                  <button className="btn btn-sm" onClick={() => go(`openings/practice/${line.id}`)}>Practise from memory</button>
+                  <button className="btn btn-sm" onClick={() => go(`analysis/${encodeURIComponent(fenNow)}`)}>Analyse the final position</button>
+                  <button className="btn btn-sm" onClick={() => { setPly(0); setMistakes(0); setPhase('explain'); }}>Again</button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+    </div>
   );
 }

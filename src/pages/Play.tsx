@@ -16,6 +16,12 @@ import { tryMove, uid, START_FEN, opp } from '../chess/util';
 import { identifyOpening } from '../openings/identify';
 import { scoreFor } from '../analysis/strength';
 import { go } from '../services/router';
+import { findBookLine, type BookLine } from '../openings/lines';
+import { teachMove } from '../openings/teachLine';
+import { analyzeCandidates, compareMoves, type Comparison } from '../coach/compare';
+import { coachEngine } from '../engine/browser';
+import { WhyBetter } from '../ui/WhyBetter';
+import { Explained } from '../ui/Explained';
 import type { GameRecord } from '../analysis/types';
 
 interface Setup { levelId: string; personality: string; color: 'w' | 'b' | 'random'; tc: string; takebacks: boolean; masterMs: number }
@@ -31,6 +37,8 @@ interface Live {
   takebacks: number;
   startedAt: number;
   over?: { result: GameRecord['result']; reason: string };
+  /** Opening-line practice: the bot plays these moves while you stay in the line. */
+  book?: { lineId: string; name: string; uci: string[]; notes: Record<number, string>; deviated?: { ply: number; book: string; played: string } };
 }
 
 const TCS: { id: string; label: string; base: number; inc: number }[] = [
@@ -51,8 +59,11 @@ const fmtClock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export function PlayPage() {
+export function PlayPage({ route = [] }: { route?: string[] }) {
   const [data] = useAppData();
+  const bookLine: BookLine | undefined = route[0] === 'line' && route[1] && data ? findBookLine(route[1], data.repertoire) : undefined;
+  const [why, setWhy] = useState<{ ply: number; c: Comparison } | null>(null);
+  const [whyBusy, setWhyBusy] = useState(false);
   const [setup, setSetup] = useState<Setup>(DEFAULT_SETUP);
   const [live, setLive] = useState<Live | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -114,7 +125,10 @@ export function PlayPage() {
   });
 
   function start() {
-    const userColor: Color = setup.color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : setup.color;
+    const book = live?.book && !bookLine ? { ...live.book, deviated: undefined } : bookLine ? { lineId: bookLine.id, name: bookLine.name, uci: bookLine.uci, notes: bookLine.notes } : undefined;
+    const lineColor = bookLine?.color ?? (live?.book ? live.userColor : undefined);
+    const userColor: Color = lineColor ?? (setup.color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : setup.color);
+    setWhy(null);
     const tc = TCS.find((t) => t.id === setup.tc)!;
     token.current++;
     playEngine.cancelAll();
@@ -123,7 +137,7 @@ export function PlayPage() {
     setFlipped(userColor === 'b');
     setLive({
       id: uid(), setup, userColor, moves: [], times: [], clock: tc.base ? { w: tc.base, b: tc.base } : null, inc: tc.inc,
-      turnStart: Date.now(), takebacks: 0, startedAt: Date.now(),
+      turnStart: Date.now(), takebacks: 0, startedAt: Date.now(), book,
     });
     void kv.set('playSetup', setup);
     window.scrollTo({ top: 0 });
@@ -175,6 +189,7 @@ export function PlayPage() {
       userColor: l.userColor, result, termination: reason,
       opponent: { kind: 'ai', name: oppName, levelId: level.id, personality: pers.id, elo: level.elo },
       timeControl: l.setup.tc, opening: identifyOpening(l.moves), takebacks: l.takebacks,
+      book: l.book ? { lineId: l.book.lineId, name: l.book.name, plies: l.book.uci.length, deviated: l.book.deviated } : undefined,
     };
     await games.put(rec);
     setSavedId(rec.id);
@@ -189,10 +204,12 @@ export function PlayPage() {
     const level = levelById(live.setup.levelId);
     const lvl = level.movetime ? { ...level, movetime: live.setup.masterMs } : level;
     const t0 = Date.now();
-    chooseMove(playEngine, fen, lvl, live.setup.personality)
+    const inBook = live.book && !live.book.deviated && live.moves.length < live.book.uci.length && live.book.uci.slice(0, live.moves.length).join(' ') === live.moves.join(' ');
+    const pick = inBook ? Promise.resolve({ uci: live.book!.uci[live.moves.length] }) : chooseMove(playEngine, fen, lvl, live.setup.personality);
+    pick
       .then(async (choice) => {
         // Feel natural: don't answer instantly (but never wait on a clock that is ticking for real).
-        const wait = Math.max(0, (live.clock ? 250 : 450) - (Date.now() - t0));
+        const wait = Math.max(0, (live.clock ? 250 : inBook ? 700 : 450) - (Date.now() - t0));
         if (wait) await new Promise((r) => setTimeout(r, wait));
         const cur = liveRef.current;
         if (my !== token.current || !cur || cur.id !== live.id || cur.over) return;
@@ -210,8 +227,24 @@ export function PlayPage() {
 
   function userMove(uci: string) {
     if (!live || !userTurn || viewPly !== null) return;
-    const next = applyMove(live, uci);
+    let base = live;
+    const ply = live.moves.length;
+    if (live.book && !live.book.deviated && ply < live.book.uci.length && uci !== live.book.uci[ply])
+      base = { ...live, book: { ...live.book, deviated: { ply, book: live.book.uci[ply], played: uci } } };
+    const next = applyMove(base, uci);
     if (next) setLive(next);
+    else if (base !== live) setLive((l) => (l ? { ...l, book: base.book } : l));
+  }
+  async function explainDeviation() {
+    const d = live?.book?.deviated;
+    if (!live || !d) return;
+    setWhyBusy(true);
+    try {
+      const f = fenOf(live.moves.slice(0, d.ply)).fen();
+      const cands = await analyzeCandidates(coachEngine, f, [d.book, d.played], 14);
+      const b = cands.find((x) => x.uci === d.book), m = cands.find((x) => x.uci === d.played);
+      if (b && m) setWhy({ ply: d.ply, c: compareMoves(f, b, m) });
+    } catch { /* engine busy */ } finally { setWhyBusy(false); }
   }
 
   function takeback() {
@@ -224,7 +257,9 @@ export function PlayPage() {
     const back = turn === live.userColor ? 2 : 1;
     const keep = Math.max(live.userColor === 'b' ? 1 : 0, n - back);
     if (keep >= n) return;
-    setLive({ ...live, moves: live.moves.slice(0, keep), times: live.times.slice(0, keep), turnStart: Date.now(), takebacks: live.takebacks + 1 });
+    const book = live.book && live.book.deviated && live.book.deviated.ply >= keep ? { ...live.book, deviated: undefined } : live.book;
+    if (book !== live.book) setWhy(null);
+    setLive({ ...live, book, moves: live.moves.slice(0, keep), times: live.times.slice(0, keep), turnStart: Date.now(), takebacks: live.takebacks + 1 });
     setViewPly(null);
   }
   function offerDraw() {
@@ -269,7 +304,14 @@ export function PlayPage() {
 
   if (!live) {
     return (
-      <Page title="Play" subtitle="Play a serious game against a Stockfish-powered opponent. Every finished game is analysed and feeds your training plan.">
+      <Page title={bookLine ? 'Play the line' : 'Play'} subtitle={bookLine ? 'The bot plays the opening line with you, then the game goes on as a real game. Afterwards the review shows where it went wrong.' : 'Play a serious game against a Stockfish-powered opponent. Every finished game is analysed and feeds your training plan.'}>
+        {bookLine && (
+          <Card className="mb-5 card-hi">
+            <div className="font-semibold">{bookLine.name} <span className="text-ink-400 text-sm">as {bookLine.color === 'w' ? 'White' : 'Black'}</span></div>
+            <p className="mt-1 text-sm text-ink-300">The bot plays its side of the line ({bookLine.san.length} moves) exactly. Play your side from memory; if you leave the line, I'll show you where and why the book move is better. After the line, the bot plays on at the strength you choose.</p>
+            <p className="mt-1 font-mono text-xs text-ink-400">{bookLine.san.map((x, i) => `${i % 2 === 0 ? `${i / 2 + 1}.` : ''}${x}`).join(' ')}</p>
+          </Card>
+        )}
         <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
           <Card title="Opponent strength" right={rec && <button className="btn btn-sm" onClick={() => setSetup({ ...setup, levelId: rec.id })}>Use recommended: {rec.name}</button>}>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -300,8 +342,8 @@ export function PlayPage() {
             </Card>
             <Card title="Game">
               <div className="space-y-4">
-                <div><div className="label mb-2">Your colour</div>
-                  <Segmented value={setup.color} onChange={(v) => setSetup({ ...setup, color: v })} options={[{ value: 'w', label: 'White' }, { value: 'random', label: 'Random' }, { value: 'b', label: 'Black' }]} /></div>
+                {!bookLine && <div><div className="label mb-2">Your colour</div>
+                  <Segmented value={setup.color} onChange={(v) => setSetup({ ...setup, color: v })} options={[{ value: 'w', label: 'White' }, { value: 'random', label: 'Random' }, { value: 'b', label: 'Black' }]} /></div>}
                 <div><div className="label mb-2">Time control</div>
                   <Segmented value={setup.tc} onChange={(v) => setSetup({ ...setup, tc: v })} options={TCS.map((t) => ({ value: t.id, label: t.label }))} /></div>
                 {level.movetime && (
@@ -343,6 +385,7 @@ export function PlayPage() {
             </div>
             {engineError && <p className="mt-2 text-sm text-blunder">{engineError}</p>}
           </Card>
+          {live.book && <BookPanel live={live} why={why} whyBusy={whyBusy} onWhy={explainDeviation} />}
           <Card className="!p-2">
             <div className="h-[130px] sm:h-[220px] lg:h-[320px]">
               <MoveList sans={sans} current={viewPly ?? sans.length - 1} onSelect={(i) => setViewPly(i === sans.length - 1 ? null : i)} />
@@ -400,3 +443,32 @@ export function PlayPage() {
   );
 }
 export { START_FEN };
+
+/** While playing a line: where you are in it, why the last book move was played, and where you left it. */
+function BookPanel({ live, why, whyBusy, onWhy }: { live: Live; why: { ply: number; c: Comparison } | null; whyBusy: boolean; onWhy: () => void }) {
+  const b = live.book!;
+  const n = live.moves.length;
+  const inLine = !b.deviated && n <= b.uci.length && b.uci.slice(0, n).join(' ') === live.moves.join(' ');
+  const lastIdx = Math.min(n, b.uci.length) - 1;
+  const teach = inLine && lastIdx >= 0 ? teachMove(fenOf(live.moves.slice(0, lastIdx)).fen(), live.moves[lastIdx], live.userColor, b.notes[lastIdx]) : null;
+  const d = b.deviated;
+  return (
+    <Card>
+      <div className="label">Opening line</div>
+      <div className="font-semibold text-sm">{b.name}</div>
+      {inLine && n < b.uci.length && <p className="mt-1 text-xs text-ink-400">Book move {n + 1} of {b.uci.length}{(n % 2 === 0) === (live.userColor === 'w') ? ': your turn, play the line from memory.' : ''}</p>}
+      {inLine && n >= b.uci.length && <p className="mt-1 text-sm text-good">Line complete. From here it's a real game: use the plans you learned.</p>}
+      {teach && <p className="mt-2 text-sm text-ink-200"><b>{teach.san}</b> {teach.mine ? '(you)' : '(them)'}: <Explained text={teach.text} /></p>}
+      {d && (
+        <div className="mt-2 text-sm">
+          <p className="text-miss">You left the line on move {Math.floor(d.ply / 2) + 1}: you played <b>{sanAt(live.moves, d.ply, d.played)}</b>, the book move is <b>{sanAt(live.moves, d.ply, d.book)}</b>. The game goes on; the review will look at it too.</p>
+          {why?.ply === d.ply ? <WhyBetter c={why.c} className="mt-2" /> : <button className="btn btn-sm mt-2" disabled={whyBusy} onClick={onWhy}>{whyBusy ? 'Comparing…' : 'Why is the book move better?'}</button>}
+        </div>
+      )}
+    </Card>
+  );
+}
+function sanAt(moves: string[], ply: number, uci: string) {
+  const c = fenOf(moves.slice(0, ply));
+  return tryMove(c, uci)?.san ?? uci;
+}

@@ -98,9 +98,20 @@ export const THEME_GUIDE: Record<string, ThemeGuide> = {
   eg_tactic: { what: 'A tactic in the endgame: promotion tricks, deflections, stalemate traps.', spot: 'Passed pawns and few pieces.', ask: ['Which piece stops my pawn? Can I deflect it?'], trap: 'Missing a stalemate defence.' },
 };
 
-/** The coach's intro line before an exercise, tuned to the level. */
-export function coachIntro(theme: string, goal: string, level: CoachLevel): string {
+const NO_LAST: Record<string, string> = {
+  'Look at the piece they moved last: what does it attack now, and what line did it open behind it?': 'Go through your pieces one by one: which are attacked, and by what? Then list their checks and captures.',
+  'What did their last move stop defending?': 'Which of their pieces has no defender, or fewer defenders than attackers?',
+};
+/** The guide for a theme; when the opponent's last move isn't known, advice that needs it is swapped out. */
+export function guideFor(theme: string, hasLast: boolean): ThemeGuide | undefined {
   const g = THEME_GUIDE[theme];
+  if (!g || hasLast) return g;
+  return { ...g, spot: NO_LAST[g.spot] ?? g.spot, ask: g.ask.map((a) => NO_LAST[a] ?? a) };
+}
+
+/** The coach's intro line before an exercise, tuned to the level. */
+export function coachIntro(theme: string, goal: string, level: CoachLevel, hasLast = true): string {
+  const g = guideFor(theme, hasLast);
   if (!g) return goal === 'hold' ? 'They have a threat. Find it first, then the move that stops it.' : 'Checks, captures and threats first: for you and for them.';
   if (level === 'beginner') return `Ask yourself: ${g.ask[0]}`;
   if (level === 'intermediate') return `Tip: ${g.spot}`;

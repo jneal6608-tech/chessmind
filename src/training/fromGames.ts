@@ -15,6 +15,7 @@ export function exercisesFromGame(g: GameRecord): Exercise[] {
   if (!g.analysis) return [];
   const out: Exercise[] = [];
   const opp = g.opponent.name;
+  const byPly = new Map(g.analysis.moves.map((x) => [x.ply, x]));
   for (const m of g.analysis.moves) {
     if (m.color !== g.userColor) continue;
     if (!(m.cls === 'blunder' || m.cls === 'mistake' || m.cls === 'miss')) continue;
@@ -33,7 +34,7 @@ export function exercisesFromGame(g: GameRecord): Exercise[] {
       title: `${colorName(g.userColor)} vs ${opp}, move ${moveNo}`,
       prompt: defending ? `Your opponent has a threat here. First work out what it is (tap "What are they threatening?" if you're stuck), then find the move that holds.` : `You played ${m.san} here. Find the stronger move.`,
       explanation: primary?.why ?? '', goal: defending ? 'hold' : 'best', evalCp: Math.round(moverBefore),
-      played: m.uci, threat: defending ? m.threatUci : undefined, gameId: g.id, ply: m.ply, weakness: primary?.key, tolerance: 4,
+      played: m.uci, threat: defending ? m.threatUci : undefined, prevFen: byPly.get(m.ply - 1)?.fenBefore, lastMove: byPly.get(m.ply - 1)?.uci, gameId: g.id, ply: m.ply, weakness: primary?.key, tolerance: 4,
     });
   }
   return out;

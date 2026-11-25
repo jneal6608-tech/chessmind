@@ -123,3 +123,13 @@ describe('principles: Stockfish agrees with every lesson answer', () => {
     });
   }
 });
+
+describe('bank: the opponent\'s last move leads to the exercise position', () => {
+  it('every stored last move is legal and reaches the position', () => {
+    for (const x of BANK.filter((e) => e.lastMove)) {
+      const c = new Chess(x.prevFen!);
+      expect(tryMove(c, x.lastMove!), x.id).toBeTruthy();
+      expect(c.fen().split(' ').slice(0, 4).join(' '), x.id).toBe(x.fen.split(' ').slice(0, 4).join(' '));
+    }
+  });
+});

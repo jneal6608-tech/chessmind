@@ -247,6 +247,14 @@ function GameReview({ id }: { id: string }) {
           <a href="#/review" className="text-xs text-ink-400 hover:text-ink-200">← All games</a>
           <h1 className="h-display text-xl sm:text-2xl truncate">You ({game.userColor === 'w' ? 'White' : 'Black'}) vs {game.opponent.name} <ResultBadge result={game.result} color={game.userColor} /></h1>
           <div className="text-xs text-ink-400">{fmtDate(game.date)} · {game.opening ? `${game.opening.eco} ${game.opening.name}` : 'Opening not identified'} · {game.termination || game.result}</div>
+          {game.book && (
+            <div className="mt-1 text-xs">
+              <span className="chip !text-[10px] text-brass-300 border-brass-600">Line practice: {game.book.name}</span>{' '}
+              {game.book.deviated
+                ? <button className="text-miss hover:underline" onClick={() => { setFocus(null); setPly(game.book!.deviated!.ply); }}>you left the line on move {Math.floor(game.book.deviated.ply / 2) + 1} (book: {sanOfMove(game, game.book.deviated.ply, game.book.deviated.book)}) →</button>
+                : <span className="text-good">you played the whole line correctly</span>}
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <button className="btn btn-primary btn-sm" onClick={() => setExplore({ fen: boardFen, gameMove: !focusMove ? game.moves[ply + 1] : undefined })}>Analyse from here</button>
@@ -489,3 +497,9 @@ function StoryList({ steps, at, onPick, tone }: { steps: Step[]; at: number; onP
 }
 const clamp = (cp: number) => Math.max(-6, Math.min(6, cp / 100));
 export type { GameRecord };
+
+function sanOfMove(g: GameRecord, ply: number, uci: string) {
+  const c = new Chess(g.startFen);
+  for (const m of g.moves.slice(0, ply)) c.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] as 'q' | undefined });
+  try { return c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] as 'q' | undefined }).san; } catch { return uci; }
+}
